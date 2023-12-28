@@ -39,7 +39,19 @@ class OrtValueNameIdxMap {
     auto it = map_.find(name);
 #endif
     if (it == map_.end()) {
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could not find OrtValue with name '", name, "'");
+      std::string name_partial = "";
+      for (auto kv : map_)
+      {
+        if (kv.first.find(name) != std::string::npos)
+        {
+          name_partial = kv.first;
+          break;
+        }
+      }
+      it = map_.find(name_partial);
+      if (it == map_.end()) {
+        return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could not find OrtValue with name '", name, "'");
+      }
     }
 
     idx = it->second;
