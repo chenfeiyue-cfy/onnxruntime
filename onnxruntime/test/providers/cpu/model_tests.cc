@@ -25,6 +25,10 @@
 #include "core/providers/nnapi/nnapi_provider_factory.h"
 #endif
 
+#ifdef USE_VSINPU
+#include "core/providers/vsinpu/vsinpu_provider_factory.h"
+#endif
+
 #ifdef USE_RKNPU
 #include "core/providers/rknpu/rknpu_provider_factory.h"
 #endif
@@ -720,6 +724,11 @@ TEST_P(ModelTest, Run) {
         ASSERT_ORT_STATUS_OK(OrtSessionOptionsAppendExecutionProvider_Nnapi(ortso, 0));
       }
 #endif
+#ifdef USE_VSINPU
+      else if (provider_name == "vsinpu") {
+        ASSERT_ORT_STATUS_OK(OrtSessionOptionsAppendExecutionProvider_VSINPU(ortso));
+      }
+#endif
 #ifdef USE_RKNPU
       else if (provider_name == "rknpu") {
         ASSERT_ORT_STATUS_OK(OrtSessionOptionsAppendExecutionProvider_Rknpu(ortso));
@@ -888,6 +897,9 @@ static ORT_STRING_VIEW provider_name_dnnl = ORT_TSTR("dnnl");
 #if defined(USE_NNAPI) && defined(__ANDROID__)
 static ORT_STRING_VIEW provider_name_nnapi = ORT_TSTR("nnapi");
 #endif
+#ifdef USE_VSINPU
+static ORT_STRING_VIEW provider_name_vsinpu = ORT_TSTR("vsinpu");
+#endif
 #ifdef USE_RKNPU
 static ORT_STRING_VIEW provider_name_rknpu = ORT_TSTR("rknpu");
 #endif
@@ -928,6 +940,9 @@ static ORT_STRING_VIEW provider_name_dml = ORT_TSTR("dml");
 // For any non-Android system, NNAPI will only be used for ort model converter
 #if defined(USE_NNAPI) && defined(__ANDROID__)
   provider_names[provider_name_nnapi] = {opset7, opset8, opset9, opset10, opset11, opset12, opset13, opset14, opset15, opset16, opset17, opset18};
+#endif
+#ifdef USE_VSINPU
+  provider_names[provider_name_vsinpu] = {};
 #endif
 #ifdef USE_RKNPU
   provider_names[provider_name_rknpu] = {};

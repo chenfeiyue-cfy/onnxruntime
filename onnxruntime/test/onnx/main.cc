@@ -40,7 +40,7 @@ void usage() {
       "\t-r [repeat]: Specifies the number of times to repeat\n"
       "\t-v: verbose\n"
       "\t-n [test_case_name]: Specifies a single test case to run.\n"
-      "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', "
+      "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', 'vsinpu'"
       "'openvino', 'rocm', 'migraphx', 'acl', 'armnn', 'xnnpack', 'nnapi', 'qnn', 'snpe' or 'coreml'. "
       "Default: 'cpu'.\n"
       "\t-p: Pause after launch, can attach debugger and continue\n"
@@ -152,6 +152,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_mem_pattern = true;
   bool enable_qnn = false;
   bool enable_nnapi = false;
+  bool enable_vsinpu = false;
   bool enable_coreml = false;
   bool enable_snpe = false;
   bool enable_dml = false;
@@ -227,6 +228,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_qnn = true;
           } else if (!CompareCString(optarg, ORT_TSTR("nnapi"))) {
             enable_nnapi = true;
+          } else if (!CompareCString(optarg, ORT_TSTR("vsinpu"))) {
+            enable_vsinpu = true;
           } else if (!CompareCString(optarg, ORT_TSTR("coreml"))) {
             enable_coreml = true;
           } else if (!CompareCString(optarg, ORT_TSTR("snpe"))) {
@@ -478,7 +481,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             ORT_THROW("Wrong value for htp_performance_mode. select from: " + str);
           }
         } else {
-          ORT_THROW(R"(Wrong key type entered. Choose from options: ['backend_path', 'qnn_context_cache_enable', 
+          ORT_THROW(R"(Wrong key type entered. Choose from options: ['backend_path', 'qnn_context_cache_enable',
 'qnn_context_cache_path', 'profiling_level', 'rpc_control_latency', 'htp_performance_mode'])");
         }
 
@@ -495,6 +498,14 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Nnapi(sf, 0));
 #else
       fprintf(stderr, "NNAPI is not supported in this build");
+      return -1;
+#endif
+    }
+    if (enable_vsinpu) {
+#ifdef USE_VSINPU
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VSINPU(sf));
+#else
+      fprintf(stderr, "VSINPU is not supported in this build");
       return -1;
 #endif
     }

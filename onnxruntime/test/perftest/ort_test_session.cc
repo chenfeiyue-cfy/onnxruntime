@@ -654,6 +654,12 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
 #else
     ORT_THROW("NNAPI is not supported in this build\n");
 #endif
+  } else if (provider_name == onnxruntime::kVSINPUExecutionProvider) {
+#ifdef USE_VSINPU
+    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VSINPU(session_options));
+#else
+    ORT_THROW("VSINPU is not supported in this build\n");
+#endif
   } else if (provider_name == onnxruntime::kCoreMLExecutionProvider) {
 #ifdef USE_COREML
     Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CoreML(session_options, 0));
