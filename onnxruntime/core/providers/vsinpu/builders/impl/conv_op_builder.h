@@ -28,7 +28,7 @@ namespace vsi {
 namespace npu {
 class ConvOpBuilder : public BaseOpBuilder {
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
-                     const Node* node) {
+                     const Node* node) const override {
     auto input_defs = node->InputDefs();
     auto shape = vsi::npu::util::GetTensorShape(*input_defs[0]);
     if (shape.NumDimensions() == 5) {
@@ -62,7 +62,7 @@ class ConvOpBuilder : public BaseOpBuilder {
         helper.Get("strides", is_1d_conv ? std::vector<uint32_t>{default_uint}
                                          : default_vec);
     auto dilation =
-        helper.Get("dilation", is_1d_conv ? std::vector<uint32_t>{default_uint}
+        helper.Get("dilations", is_1d_conv ? std::vector<uint32_t>{default_uint}
                                           : default_vec);
 
     std::shared_ptr<tim::vx::Operation> op;
