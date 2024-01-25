@@ -22,7 +22,6 @@
  *
  *****************************************************************************/
 #include "core/framework/compute_capability.h"
-#include "core/graph/graph_utils.h"
 #include "vsinpu_execution_provider.h"
 #include "vsinpu_ep_graph.h"
 #include "builders/op_builder_factory.h"
@@ -344,16 +343,14 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
   for (const auto& fused_node_graph : fused_nodes_and_graphs) {
     const GraphViewer& graph_viewer = fused_node_graph.filtered_graph;
     NodeComputeInfo compute_info;
-
     std::shared_ptr<vsi::npu::GraphEP> graph_ep = std::make_shared<vsi::npu::GraphEP>();
 
     for (auto tensor : graph_viewer.GetInputsIncludingInitializers()) {
       LOGS_DEFAULT(VERBOSE) << "subgraph input init:" << vsi::npu::util::PrintNode(*tensor) << "#"
-                            << graph_viewer.IsConstantInitializer(tensor->Name(), true) << "#"
-                            << graph_utils::IsInitializer(graph_viewer.GetGraph(), tensor->Name(), true);
+                            << graph_viewer.IsInitializedTensor(tensor->Name());
       auto input = std::make_shared<vsi::npu::GraphIOInfo>();
       input->name = tensor->Name();
-      if (graph_utils::IsInitializer(graph_viewer.GetGraph(), tensor->Name(), true)) {
+      if (graph_viewer.IsInitializedTensor(tensor->Name())) {
         input->is_initializer = true;
       } else {
         input->is_initializer = false;

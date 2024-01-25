@@ -79,7 +79,7 @@ tim::vx::ShapeType OnnxShapeToTIMVXShape(const onnxruntime::TensorShape ts) {
   if (ts.NumDimensions() == 0) {
     timvx_shape.push_back(1);
   } else {
-    for (int i = 0; i < ts.NumDimensions(); i++) {
+    for (size_t i = 0; i < ts.NumDimensions(); i++) {
       timvx_shape[i] = ts.GetDims()[i];
     }
   }
@@ -246,7 +246,7 @@ bool CheckMainInputType(const Node* node, std::string& reason) {
 
 bool CheckZeroDim(const NodeArg* node_arg) {
   auto shape = node_arg->Shape();
-  if (shape == nullptr || shape->dim_size() == 0) {
+  if (shape == nullptr) {
     return false;
   }
   for (int i = 0; i < shape->dim_size(); i++) {
