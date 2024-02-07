@@ -498,7 +498,7 @@ class QLinearConvOpTester {
     // NOTE, for now the tolerance will only apply if the NNAPI is actually used,
     // if for any reason the execution falls back to CPU, we still expect an exact match
     // See, 'void Check<uint8_t>(...' in onnxruntime/test/providers/provider_test_utils.cc
-#if defined(USE_NNAPI) || defined(USE_DML)
+#if defined(USE_NNAPI) || defined(USE_DML) || defined(USE_VSINPU)
     // TODO: Verify if DML can possibly have a ROUNDING_MODE parameter and conform to the other EPs #41968513
     abs_error = 1.0f;
 #endif

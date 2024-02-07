@@ -106,7 +106,7 @@ struct TensorCheck<uint8_t> {
     // For any other EPs, we still expect an exact match for the results
     // TODO: Verify if DML can possibly have a ROUNDING_MODE parameter and conform to the other EPs #41968513
     if ((provider_type == kNnapiExecutionProvider || provider_type == kDmlExecutionProvider ||
-         provider_type == kXnnpackExecutionProvider) &&
+         provider_type == kXnnpackExecutionProvider || provider_type == kVSINPUExecutionProvider) &&
         (has_abs_err || has_rel_err)) {
       double threshold = has_abs_err ? *(params.absolute_error)
                                      : 0.0;

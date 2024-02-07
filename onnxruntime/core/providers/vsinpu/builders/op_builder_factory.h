@@ -28,6 +28,7 @@
 #include "impl/elementwise_op_builder.h"
 #include "impl/gemm_op_builder.h"
 #include "impl/pool_op_builder.h"
+#include "impl/qlinearconv_op_builder.h"
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
@@ -60,6 +61,7 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("HardSigmoid", HardSigmoidOpBuilder),
     REGISTER_OP_BUILDER("HardSwish", HardSwishOpBuilder),
     REGISTER_OP_BUILDER("GlobalAveragePool", GlobalAveragePoolOpBuilder),
+    REGISTER_OP_BUILDER("QLinearConv", QLinearConvOpBuilder)
 
 #undef REGISTER_OP_BUILDER
 };
