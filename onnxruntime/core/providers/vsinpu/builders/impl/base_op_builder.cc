@@ -40,6 +40,7 @@ static bool IsTypeSupported(const NodeArg* node_arg) {
     case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT8:
     case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT16:
     case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT32:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT64:
       return true;
     default:
       return false;
