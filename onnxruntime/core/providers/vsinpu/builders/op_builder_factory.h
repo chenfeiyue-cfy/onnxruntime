@@ -29,6 +29,8 @@
 #include "impl/gemm_op_builder.h"
 #include "impl/pool_op_builder.h"
 #include "impl/qlinearconv_op_builder.h"
+#include "impl/flatten_op_builder.h"
+#include "impl/matmul_op_builder.h"
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
@@ -61,7 +63,12 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("HardSigmoid", HardSigmoidOpBuilder),
     REGISTER_OP_BUILDER("HardSwish", HardSwishOpBuilder),
     REGISTER_OP_BUILDER("GlobalAveragePool", GlobalAveragePoolOpBuilder),
-    REGISTER_OP_BUILDER("QLinearConv", QLinearConvOpBuilder)
+    REGISTER_OP_BUILDER("QLinearConv", QLinearConvOpBuilder),
+    REGISTER_OP_BUILDER("Flatten", FlattenOpBuilder),
+    REGISTER_OP_BUILDER("MatMul", MatMulOpBuilder),
+    REGISTER_OP_BUILDER("GlobalMaxPool", GlobalMaxPoolOpBuilder),
+    REGISTER_OP_BUILDER("AveragePool", AveragePoolOpBuilder),
+    REGISTER_OP_BUILDER("MaxPool", MaxPoolOpBuilder),
 
 #undef REGISTER_OP_BUILDER
 };

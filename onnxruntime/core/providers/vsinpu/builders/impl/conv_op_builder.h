@@ -100,7 +100,7 @@ class ConvOpBuilder : public BaseOpBuilder {
         }
       }
     } else {
-      auto pads = helper.Get("pads", default_vec);
+      auto pads = helper.Get("pads", std::vector<uint32_t>{0U,0U});
       if (group != 1) {
         if (is_1d_conv) {
           op = graph_ep->GetGraph()
