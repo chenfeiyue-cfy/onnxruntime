@@ -74,7 +74,8 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("MaxPool", MaxPoolOpBuilder),
     REGISTER_OP_BUILDER("Reshape", ReshapeOpBuilder),
     REGISTER_OP_BUILDER("Concat", ConcatOpBuilder),
-    REGISTER_OP_BUILDER("Softmax", SoftmaxOpBuilder)
+    REGISTER_OP_BUILDER("Softmax", SoftmaxOpBuilder),
+    REGISTER_OP_BUILDER("Transpose", TransposeOpBuilder)
 
 #undef REGISTER_OP_BUILDER
 };
