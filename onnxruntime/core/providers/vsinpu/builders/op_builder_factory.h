@@ -31,6 +31,9 @@
 #include "impl/qlinearconv_op_builder.h"
 #include "impl/flatten_op_builder.h"
 #include "impl/matmul_op_builder.h"
+#include "impl/tensor_op_builder.h"
+#include "impl/concat_op_builder.h"
+#include "impl/softmax_op_builder.h"
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
@@ -69,6 +72,9 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("GlobalMaxPool", GlobalMaxPoolOpBuilder),
     REGISTER_OP_BUILDER("AveragePool", AveragePoolOpBuilder),
     REGISTER_OP_BUILDER("MaxPool", MaxPoolOpBuilder),
+    REGISTER_OP_BUILDER("Reshape", ReshapeOpBuilder),
+    REGISTER_OP_BUILDER("Concat", ConcatOpBuilder),
+    REGISTER_OP_BUILDER("Softmax", SoftmaxOpBuilder)
 
 #undef REGISTER_OP_BUILDER
 };

@@ -64,6 +64,7 @@ tim::vx::DataType OnnxDtypeToTIMVXDtype(const ONNX_NAMESPACE::DataType type) {
       {"tensor(uint8)", tim::vx::DataType::UINT8},
       {"tensor(int32)", tim::vx::DataType::INT32},
       {"tensor(int16)", tim::vx::DataType::INT16},
+      {"tensor(int64)", tim::vx::DataType::INT64},
       {"tensor(bool)", tim::vx::DataType::INT8},
   };
   auto search = type_table.find(*type);
