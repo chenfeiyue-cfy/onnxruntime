@@ -22,39 +22,53 @@
  *
  *****************************************************************************/
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
-#include "core/providers/common.h"
-#include "core/providers/shared/utils/utils.h"
 
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-class FlattenOpBuilder : public BaseOpBuilder {
+enum {
+  matrixA = 0,
+  A_scale = 1,
+  A_zero_point = 2,
+  matrixB = 3,
+  B_scale = 4,
+  B_zero_point = 5,
+  out_scale = 6,
+  out_zero_point = 7
+};
+
+class QLinearMatMulOpBuilder : public BaseOpBuilder {
+  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
+                     const Node* node) const override {
+    auto input_defs = node->InputDefs();
+    auto A_def = input_defs[matrixA];
+    auto B_def = input_defs[matrixB];
+    for (auto def : input_defs) {
+      if (def->Name() == A_def->Name() || def->Name() == B_def->Name())
+        continue;
+      else {
+        if (!graph_viewer.IsInitializedTensor(def->Name())) {
+          LOGS_DEFAULT(WARNING) << "Scale and zero point must be known before setting graph.";
+          return false;
+        }
+      }
+    }
+
+    if (input_defs[A_scale]->Shape()->dim_size() != 1 || input_defs[B_scale]->Shape()->dim_size() != 1 || input_defs[out_scale]->Shape()->dim_size() != 1) {
+      LOGS_DEFAULT(ERROR) << "Per channel quantized output is not supported in QuantizeLinearOp.";
+      return false;
+    }
+
+    return true;
+  }
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
-    LOGS_DEFAULT(VERBOSE) << "Creating Flatten Op.";
-    std::vector<uint32_t> reshape_param;
-    if (outputs[0]->GetShape().size() == 2)
-      reshape_param = outputs[0]->GetShape();
-    else {
-      auto input_shape = inputs[0]->GetShape();
-      NodeAttrHelper helper(*node);
-      int64_t axis = helper.Get("axis", 1);
-      axis = util::ReverseAxis(static_cast<int32_t>(axis), input_shape.size());
-      uint32_t first_dim = 1;
-      for (int64_t i = 0; i < axis; i++) {
-        first_dim *= inputs[0]->GetShape()[i];
-      }
-      uint32_t second_dim = inputs[0]->GetSpec().GetElementNum() / first_dim;
-      reshape_param.push_back(first_dim);
-      reshape_param.push_back(second_dim);
-    }
-    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(reshape_param);
-    (*op).BindInput(inputs[0]).BindOutput(outputs[0]);
-    graph_ep->GetOps().push_back(std::move(op));
-    return true;
-  }
+                     const Node* node) override;
+
+ private:
+  template <typename T1, typename T2, typename T3>
+  struct QMatMulImpl;
 };
 }  // namespace npu
 

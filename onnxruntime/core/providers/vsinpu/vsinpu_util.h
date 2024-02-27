@@ -69,6 +69,10 @@ bool CheckAllExcludeType(const Node* node, std::string& reason);
 
 bool CheckNoZeroDim(const Node* node);
 
+int32_t ReverseAxis(int32_t origin_axis, int32_t length);
+
+std::vector<int32_t> ReverseAxis(std::vector<int32_t> origin_axes, int32_t length);
+
 }  // namespace util
 }  // namespace npu
 }  // namespace vsi

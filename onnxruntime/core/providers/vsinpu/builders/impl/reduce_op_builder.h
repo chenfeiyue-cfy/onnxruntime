@@ -22,39 +22,57 @@
  *
  *****************************************************************************/
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
-#include "core/providers/common.h"
 #include "core/providers/shared/utils/utils.h"
 
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-class FlattenOpBuilder : public BaseOpBuilder {
-  bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
-                     std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
-                     std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
-    LOGS_DEFAULT(VERBOSE) << "Creating Flatten Op.";
-    std::vector<uint32_t> reshape_param;
-    if (outputs[0]->GetShape().size() == 2)
-      reshape_param = outputs[0]->GetShape();
-    else {
-      auto input_shape = inputs[0]->GetShape();
-      NodeAttrHelper helper(*node);
-      int64_t axis = helper.Get("axis", 1);
-      axis = util::ReverseAxis(static_cast<int32_t>(axis), input_shape.size());
-      uint32_t first_dim = 1;
-      for (int64_t i = 0; i < axis; i++) {
-        first_dim *= inputs[0]->GetShape()[i];
-      }
-      uint32_t second_dim = inputs[0]->GetSpec().GetElementNum() / first_dim;
-      reshape_param.push_back(first_dim);
-      reshape_param.push_back(second_dim);
+class ReduceMeanOpBuilder : public BaseOpBuilder {
+  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
+                     const Node* node) const override {
+    auto input_defs = node->InputDefs();
+    if (*input_defs[0]->Type() == "tensor(int32)") {
+      LOGS_DEFAULT(WARNING) << "Not support int32 reduce mean yet.";
+      return false;
     }
-    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(reshape_param);
-    (*op).BindInput(inputs[0]).BindOutput(outputs[0]);
-    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
+  bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const Node* node) override {
+    LOGS_DEFAULT(INFO) << "Creating ReduceMean Op.";
+
+    NodeAttrHelper helper(*node);
+    std::vector<int64_t> def_axes;
+    auto input_shape_size = inputs[0]->GetShape().size();
+
+    if (node->SinceVersion() < 18 && helper.HasAttr("axes")) {
+        def_axes = helper.Get("axes", def_axes);
+    } else if (inputs.size() > 1) {
+        def_axes.resize(inputs[1]->GetSpec().GetElementNum());
+        inputs[1]->CopyDataFromTensor(def_axes.data());
+    } else {
+        for (int64_t i = 0; i < input_shape_size; ++i) {
+            def_axes.push_back(i);
+        }
+    }
+
+    std::vector<int32_t> axes(def_axes.begin(), def_axes.end());
+    axes = util::ReverseAxis(axes, input_shape_size);
+
+    if (helper.HasAttr("noop_with_empty_axes") && inputs.size() == 1 && helper.Get("noop_with_empty_axes", 0) == 1) {
+        outputs[0] = inputs[0];
+        return true;
+    }
+
+    bool keepdims = helper.Get("keepdims", 1) == 1;
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::ReduceMean>(axes, keepdims);
+    op->BindInput(inputs[0]).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
+
+    return true;
+}
 };
 }  // namespace npu
 

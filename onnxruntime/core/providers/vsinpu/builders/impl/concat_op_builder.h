@@ -49,8 +49,7 @@ class ConcatOpBuilder : public BaseOpBuilder {
     LOGS_DEFAULT(VERBOSE) << "Creating Concat Op.";
     NodeAttrHelper helper(*node);
     auto axis = helper.Get("axis", 0);
-    axis = HandleNegativeAxis(axis, inputs[0]->GetShape().size());
-    axis = inputs[0]->GetShape().size() - axis - 1;
+    axis = util::ReverseAxis(axis, inputs[0]->GetShape().size());
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Concat>(static_cast<uint32_t>(axis), inputs.size());
     (*op).BindInputs(inputs).BindOutputs(outputs);
     graph_ep->GetOps().push_back(std::move(op));

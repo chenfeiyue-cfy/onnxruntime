@@ -34,6 +34,12 @@
 #include "impl/tensor_op_builder.h"
 #include "impl/concat_op_builder.h"
 #include "impl/softmax_op_builder.h"
+#include "impl/norm_op_builder.h"
+#include "impl/clip_op_builder.h"
+#include "impl/reduce_op_builder.h"
+#include "impl/quantize_op_builder.h"
+#include "impl/dequantize_op_builder.h"
+#include "impl/qlinearmatmul_op_builder.h"
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
@@ -75,7 +81,13 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("Reshape", ReshapeOpBuilder),
     REGISTER_OP_BUILDER("Concat", ConcatOpBuilder),
     REGISTER_OP_BUILDER("Softmax", SoftmaxOpBuilder),
-    REGISTER_OP_BUILDER("Transpose", TransposeOpBuilder)
+    REGISTER_OP_BUILDER("Transpose", TransposeOpBuilder),
+    REGISTER_OP_BUILDER("BatchNormalization", BatchNormOpBuilder),
+    REGISTER_OP_BUILDER("Clip", ClipOpBuilder),
+    REGISTER_OP_BUILDER("ReduceMean", ReduceMeanOpBuilder),
+    REGISTER_OP_BUILDER("QuantizeLinear", QuantizeLinearOpBuilder),
+    REGISTER_OP_BUILDER("DequantizeLinear", DequantizeLinearOpBuilder),
+    REGISTER_OP_BUILDER("QLinearMatMul", QLinearMatMulOpBuilder),
 
 #undef REGISTER_OP_BUILDER
 };

@@ -74,8 +74,7 @@ class SoftmaxOpBuilder : public BaseOpBuilder {
       graph_ep->GetOps().push_back(std::move(softmax_op));
       graph_ep->GetOps().push_back(std::move(reshaped_output_op));
     } else {
-      axis = HandleNegativeAxis(axis, inputs[0]->GetShape().size());
-      axis = inputs[0]->GetShape().size() - axis - 1;
+      axis = util::ReverseAxis(axis, inputs[0]->GetShape().size());
       auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, static_cast<uint32_t>(axis));
       (*op).BindInputs(inputs).BindOutputs(outputs);
       graph_ep->GetOps().push_back(std::move(op));
