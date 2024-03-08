@@ -47,6 +47,8 @@ tim::vx::DataType OnnxDtypeToTIMVXDtype(const int32_t dtype) {
       return tim::vx::DataType::INT32;
     case onnx::TensorProto_DataType_INT16:
       return tim::vx::DataType::INT16;
+    case onnx::TensorProto_DataType_UINT16:
+      return tim::vx::DataType::UINT16;
     case onnx::TensorProto_DataType_BOOL:
       return tim::vx::DataType::INT8;
     default:
@@ -64,6 +66,7 @@ tim::vx::DataType OnnxDtypeToTIMVXDtype(const ONNX_NAMESPACE::DataType type) {
       {"tensor(uint8)", tim::vx::DataType::UINT8},
       {"tensor(int32)", tim::vx::DataType::INT32},
       {"tensor(int16)", tim::vx::DataType::INT16},
+      {"tensor(uint16)", tim::vx::DataType::UINT16},
       {"tensor(int64)", tim::vx::DataType::INT64},
       {"tensor(bool)", tim::vx::DataType::INT8},
   };
@@ -277,10 +280,31 @@ bool CheckNoZeroDim(const Node* node) {
       });
 
   if (!no_zero_dim) {
-    LOGS_DEFAULT(ERROR) <<"Tensor with dimension 0 is not supported.";
+    LOGS_DEFAULT(ERROR) << "Tensor with dimension 0 is not supported.";
     return false;
   }
   return true;
+}
+
+int32_t ReverseAxis(int32_t origin_axis, int32_t length) {
+  int32_t axis = 0;
+  if (origin_axis < 0) {
+    origin_axis += length;
+  }
+  axis = length - origin_axis - 1;
+  return axis;
+}
+
+std::vector<int32_t> ReverseAxis(std::vector<int32_t> origin_axes, int32_t length) {
+  std::vector<int32_t> axes;
+  for (int32_t& axis : origin_axes) {
+    if (axis < 0) {
+      axis += length;
+    }
+    axes.push_back(length - axis - 1);
+  }
+  std::sort(axes.begin(), axes.end());
+  return axes;
 }
 
 }  // namespace util

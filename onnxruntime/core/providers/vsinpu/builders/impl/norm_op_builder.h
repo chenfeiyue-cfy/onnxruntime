@@ -22,36 +22,49 @@
  *
  *****************************************************************************/
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
-#include "core/providers/common.h"
 #include "core/providers/shared/utils/utils.h"
 
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-class FlattenOpBuilder : public BaseOpBuilder {
+enum {
+  input_tensor = 0,
+  scale_tensor = 1,
+  Bias_tensor = 2,
+  mean_tensor = 3,
+  var_tensor = 4
+};
+class BatchNormOpBuilder : public BaseOpBuilder {
+  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
+                     const Node* node) const override {
+    auto input_defs = node->InputDefs();
+    NodeAttrHelper helper(*node);
+    auto training_mode = helper.Get("training_mode", 0);
+    if (training_mode) {
+      LOGS_DEFAULT(WARNING) << "Training is not supported in batch_norm op.";
+      return false;
+    }
+    if (helper.HasAttr("spatial") || node->SinceVersion() < 9) {
+      LOGS_DEFAULT(ERROR) << "VSINPU does not support 'spatial' parameter.";
+      return false;
+    }
+    if (!graph_viewer.IsInitializedTensor(input_defs[scale_tensor]->Name())) {
+      LOGS_DEFAULT(ERROR) << "Not support mean/var/gamma/beta set as dynamic input yet.";
+      return false;
+    }
+
+    return true;
+  }
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                      const Node* node) override {
-    LOGS_DEFAULT(VERBOSE) << "Creating Flatten Op.";
-    std::vector<uint32_t> reshape_param;
-    if (outputs[0]->GetShape().size() == 2)
-      reshape_param = outputs[0]->GetShape();
-    else {
-      auto input_shape = inputs[0]->GetShape();
-      NodeAttrHelper helper(*node);
-      int64_t axis = helper.Get("axis", 1);
-      axis = util::ReverseAxis(static_cast<int32_t>(axis), input_shape.size());
-      uint32_t first_dim = 1;
-      for (int64_t i = 0; i < axis; i++) {
-        first_dim *= inputs[0]->GetShape()[i];
-      }
-      uint32_t second_dim = inputs[0]->GetSpec().GetElementNum() / first_dim;
-      reshape_param.push_back(first_dim);
-      reshape_param.push_back(second_dim);
-    }
-    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(reshape_param);
-    (*op).BindInput(inputs[0]).BindOutput(outputs[0]);
+    LOGS_DEFAULT(INFO) << "Creating BatchNorm Op.";
+    NodeAttrHelper helper(*node);
+    auto epsilon = helper.Get("epsilon", 1e-5f);
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::BatchNorm>(epsilon);
+    (*op).BindInput(inputs[input_tensor]).BindInput(inputs[mean_tensor]).BindInput(inputs[var_tensor]).BindInput(inputs[scale_tensor]).BindInput(inputs[Bias_tensor]);
+    (*op).BindOutputs(outputs);
     graph_ep->GetOps().push_back(std::move(op));
     return true;
   }

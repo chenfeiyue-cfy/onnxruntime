@@ -59,12 +59,8 @@ bool BaseOpBuilder::IsSupported(const onnxruntime::GraphViewer& graph_viewer,
     return false;
   }
 
-  if (node->Domain() != "") {
-    LOGS_DEFAULT(VERBOSE) << "Only support node with default domain!";
-    return false;
-  }
-
   if (!util::CheckNoZeroDim(node)) {
+    LOGS_DEFAULT(VERBOSE) << "Dynamic shape(shape has zero dim) is not supported!";
     return false;
   }
 

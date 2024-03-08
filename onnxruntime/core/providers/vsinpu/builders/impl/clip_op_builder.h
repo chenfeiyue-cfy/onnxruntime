@@ -22,39 +22,36 @@
  *
  *****************************************************************************/
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
-#include "core/providers/common.h"
 #include "core/providers/shared/utils/utils.h"
 
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-class FlattenOpBuilder : public BaseOpBuilder {
+// template <typename T>
+class ClipOpBuilder final : public BaseOpBuilder {
+  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
+                     const Node* node) const override {
+    if (*node->InputDefs()[0]->Type() == "tensor(int64)") {
+      LOGS_DEFAULT(ERROR) << "Int64 datatype is only used to describe a param in TIM-VX.";
+      return false;
+    }
+    if (node->SinceVersion() > 6) {
+      if (node->InputDefs().size() > 1 && !graph_viewer.IsInitializedTensor(node->InputDefs()[1]->Name())) {
+        LOGS_DEFAULT(ERROR) << "Min/Max value must be const input or attribute.";
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
-    LOGS_DEFAULT(VERBOSE) << "Creating Flatten Op.";
-    std::vector<uint32_t> reshape_param;
-    if (outputs[0]->GetShape().size() == 2)
-      reshape_param = outputs[0]->GetShape();
-    else {
-      auto input_shape = inputs[0]->GetShape();
-      NodeAttrHelper helper(*node);
-      int64_t axis = helper.Get("axis", 1);
-      axis = util::ReverseAxis(static_cast<int32_t>(axis), input_shape.size());
-      uint32_t first_dim = 1;
-      for (int64_t i = 0; i < axis; i++) {
-        first_dim *= inputs[0]->GetShape()[i];
-      }
-      uint32_t second_dim = inputs[0]->GetSpec().GetElementNum() / first_dim;
-      reshape_param.push_back(first_dim);
-      reshape_param.push_back(second_dim);
-    }
-    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(reshape_param);
-    (*op).BindInput(inputs[0]).BindOutput(outputs[0]);
-    graph_ep->GetOps().push_back(std::move(op));
-    return true;
-  }
+                     const Node* node) override;
+
+ private:
+  template <typename T>
+  struct ClipImpl;
 };
 }  // namespace npu
 

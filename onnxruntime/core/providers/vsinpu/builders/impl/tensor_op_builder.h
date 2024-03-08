@@ -84,6 +84,45 @@ class ReshapeOpBuilder : public BaseOpBuilder {
     return true;
   }
 };
+
+class TransposeOpBuilder : public BaseOpBuilder {
+  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
+                     const Node* node) const override {
+    auto input_defs = node->InputDefs();
+    auto shape_dim = vsi::npu::util::GetTensorShape(*input_defs[0]).NumDimensions();
+    NodeAttrHelper helper(*node);
+    auto perm = helper.Get("perm", std::vector<uint32_t>(shape_dim, 1));
+    if (perm.size() != shape_dim) {
+      LOGS_DEFAULT(VERBOSE) << "Size mismatch between perm vector and input shape.";
+      return false;
+    }
+    if (*input_defs[0]->Type() == "tensor(int64)") {
+      LOGS_DEFAULT(VERBOSE) << "Int64 input cannot support except as parameter.";
+      return false;
+    }
+    return true;
+  }
+  bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
+                     std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                     std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                     const Node* node) override {
+    LOGS_DEFAULT(VERBOSE) << "Creating Transpose Op.";
+    std::vector<int64_t> def_val(inputs[0]->GetShape().size());
+    for (int64_t i = 0; i < def_val.size(); i++) def_val[i] = def_val.size() - i - 1;
+
+    NodeAttrHelper helper(*node);
+    def_val = helper.Get("perm", def_val);
+    std::vector<uint32_t> timvx_perm;
+    for (uint32_t i = 0; i < def_val.size(); i++) {
+      timvx_perm.push_back(def_val.size() - 1 - def_val[def_val.size() - i - 1]);
+    }
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Transpose>(timvx_perm);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
+    return true;
+  }
+};
+
 }  // namespace npu
 
 }  // namespace vsi

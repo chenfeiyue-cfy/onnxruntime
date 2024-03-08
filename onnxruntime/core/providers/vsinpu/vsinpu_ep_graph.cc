@@ -86,7 +86,7 @@ std::shared_ptr<tim::vx::Tensor> GraphEP::MapTIMVXTensor(
     for (auto output : graph_outputs_) {
       if (output->name == arg->Name()) {
         output->tensor = tensor;
-        output->shape = vsi::npu::util::GetTensorShape(*arg);
+        output->shape = utils::GetTensorShapeFromTensorShapeProto(*arg->Shape());
         break;
       }
     }
