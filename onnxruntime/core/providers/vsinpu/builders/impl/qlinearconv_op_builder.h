@@ -73,7 +73,8 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
     if (w_scale_shape.Size() != 1 && *input_defs[WEIGHT_TENSOR]->Type() == "tensor(int8)") {
       const ONNX_NAMESPACE::TensorProto* tensor_proto =
           graph_viewer.GetConstantInitializer(input_defs[WEIGHT_TENSOR_ZP]->Name(), true);
-      std::vector<int8_t> w_zp(1);
+      std::vector<int8_t> w_zp(tensor_proto->dims_size() == 0 ? 1 : tensor_proto->dims()[0]);
+
       auto status = onnxruntime::utils::UnpackTensor(
           *tensor_proto,
           tensor_proto->has_raw_data() ? tensor_proto->raw_data().data() : nullptr,
@@ -83,8 +84,8 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
         LOGS_DEFAULT(ERROR) << "Failed to get data from weight zp tensor.";
         return false;
       }
-      if (w_zp[0] != 0) {
-        LOGS_DEFAULT(ERROR) << "Asymmetric perchannel quantization with datatype int8 is not supported.";
+      if (std::any_of(w_zp.begin(), w_zp.end(), [](int i) { return i != 0; })) {
+        LOGS_DEFAULT(ERROR) << "Asymmetric perchannel quantization only allows uint8 datatype or int8 with all zero.";
         return false;
       }
     }
