@@ -56,7 +56,7 @@ bool DequantizeLinearOpBuilder::IsOpSupported(const onnxruntime::GraphViewer& gr
 template <typename T1, typename T2>
 struct DequantizeLinearOpBuilder::DequantizeImpl {
   DequantizeImpl(vsi::npu::GraphEP* graph_ep, std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
-                 std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs) {
+                 std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs, const Node* node) {
     T1 scale;
     inputs[scale_tensor]->CopyDataFromTensor(&scale);
     T2 zero_point = 0;
@@ -67,18 +67,19 @@ struct DequantizeLinearOpBuilder::DequantizeImpl {
     tim::vx::Quantization quant(tim::vx::QuantType::ASYMMETRIC, static_cast<float>(scale), static_cast<int32_t>(zero_point));
     tim::vx::TensorSpec InSpec(inputs[0]->GetSpec());
     InSpec.SetQuantization(quant);
-    auto real_input = graph_ep->GetGraph()->CreateTensor(InSpec);
-    for (auto& IO : graph_ep->GetGraphInputs()) {
-      if (IO->tensor.get() == inputs[0].get()) {
-        IO->tensor = real_input;
-      }
+    std::shared_ptr<tim::vx::Tensor> real_input = nullptr;
+    if (inputs[input_tensor]->GetQuantization().Type() != tim::vx::QuantType::NONE) {
+      real_input = inputs[input_tensor];
+    } else {
+      real_input = graph_ep->GetGraph()->CreateTensor(InSpec);
+      graph_ep->UpdateTensorMap(node->InputDefs()[input_tensor]->Name(), real_input);
     }
-    inputs[0] = real_input;
 
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
-    (*op).SetRoundingPolicy(tim::vx::OverflowPolicy::SATURATE,tim::vx::RoundingPolicy::TO_ZERO);
-    (*op).BindInput(real_input).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    std::vector<NodeArg*> input_defs;
+    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[input_tensor]));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
   }
 };
 
@@ -92,48 +93,48 @@ bool DequantizeLinearOpBuilder::HandleBuildOp(vsi::npu::GraphEP* graph_ep,
     case tim::vx::DataType::FLOAT32:
       switch (inputs[input_tensor]->GetDataType()) {
         case tim::vx::DataType::INT8:
-          DequantizeImpl<float, int8_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<float, int8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT8:
-          DequantizeImpl<float, uint8_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<float, uint8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::INT16:
-          DequantizeImpl<float, int16_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<float, int16_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT16:
-          DequantizeImpl<float, uint16_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<float, uint16_t>(graph_ep, inputs, outputs, node);
           break;
       }
       break;
     case tim::vx::DataType::FLOAT16:
       switch (inputs[input_tensor]->GetDataType()) {
         case tim::vx::DataType::INT8:
-          DequantizeImpl<Ort::Float16_t, int8_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<Ort::Float16_t, int8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT8:
-          DequantizeImpl<Ort::Float16_t, uint8_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<Ort::Float16_t, uint8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::INT16:
-          DequantizeImpl<Ort::Float16_t, int16_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<Ort::Float16_t, int16_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT16:
-          DequantizeImpl<Ort::Float16_t, uint16_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<Ort::Float16_t, uint16_t>(graph_ep, inputs, outputs, node);
           break;
       }
       break;
     case tim::vx::DataType::INT32:
       switch (inputs[input_tensor]->GetDataType()) {
         case tim::vx::DataType::INT8:
-          DequantizeImpl<int32_t, int8_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<int32_t, int8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT8:
-          DequantizeImpl<int32_t, uint8_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<int32_t, uint8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::INT16:
-          DequantizeImpl<int32_t, int16_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<int32_t, int16_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT16:
-          DequantizeImpl<int32_t, uint16_t>(graph_ep, inputs, outputs);
+          DequantizeImpl<int32_t, uint16_t>(graph_ep, inputs, outputs, node);
           break;
       }
       break;

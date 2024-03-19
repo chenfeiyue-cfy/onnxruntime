@@ -51,8 +51,8 @@ class FlattenOpBuilder : public BaseOpBuilder {
       reshape_param.push_back(second_dim);
     }
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(reshape_param);
-    (*op).BindInput(inputs[0]).BindOutput(outputs[0]);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

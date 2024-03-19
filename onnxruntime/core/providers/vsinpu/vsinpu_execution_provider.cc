@@ -371,6 +371,14 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
       vsi::npu::SupportedBuiltinOps().at(node->OpType())->BuildOp(graph_ep.get(), graph_viewer, node);
     }
 
+    for (const auto& node_info : graph_ep->GetOps()) {
+      if (node_info->input_names_.empty() && node_info->output_names_.empty())
+        continue;
+      else {
+        graph_ep->BindTensors(node_info);
+      }
+    }
+
     LOGS_DEFAULT(INFO) << "Verifying graph";
     graph_ep->GetCompiled() = graph_ep->GetGraph()->Compile();
     if (!graph_ep->GetCompiled()) {

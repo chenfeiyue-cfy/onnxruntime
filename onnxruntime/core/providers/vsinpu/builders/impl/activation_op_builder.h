@@ -35,8 +35,8 @@ class ReluOpBuilder : public BaseOpBuilder {
                      const Node* node) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Relu Activation.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Relu>();
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };
@@ -48,8 +48,8 @@ class SigmoidOpBuilder : public BaseOpBuilder {
                      const Node* node) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Sigmoid Activation.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Sigmoid>();
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };
@@ -61,8 +61,8 @@ class TanhOpBuilder : public BaseOpBuilder {
                      const Node* node) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Tanh activation.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Tanh>();
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };
@@ -78,8 +78,8 @@ class LeakyReluOpBuilder : public BaseOpBuilder {
     auto alpha = helper.Get("alpha", 1.0f);
     auto op =
         graph_ep->GetGraph()->CreateOperation<tim::vx::ops::LeakyRelu>(alpha);
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };
@@ -95,8 +95,8 @@ class EluOpBuilder : public BaseOpBuilder {
     auto alpha = helper.Get("alpha", 1.0f);
     auto op =
         graph_ep->GetGraph()->CreateOperation<tim::vx::ops::LeakyRelu>(alpha);
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };
@@ -113,8 +113,8 @@ class HardSigmoidOpBuilder : public BaseOpBuilder {
     auto beta = helper.Get("beta", 1.0f);
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::HardSigmoid>(
         alpha, beta);
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

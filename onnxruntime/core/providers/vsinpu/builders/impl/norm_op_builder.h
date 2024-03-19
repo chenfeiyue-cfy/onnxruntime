@@ -63,9 +63,14 @@ class BatchNormOpBuilder : public BaseOpBuilder {
     NodeAttrHelper helper(*node);
     auto epsilon = helper.Get("epsilon", 1e-5f);
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::BatchNorm>(epsilon);
-    (*op).BindInput(inputs[input_tensor]).BindInput(inputs[mean_tensor]).BindInput(inputs[var_tensor]).BindInput(inputs[scale_tensor]).BindInput(inputs[Bias_tensor]);
-    (*op).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    std::vector<NodeArg*> input_defs;
+    int indices[] = {input_tensor, mean_tensor, var_tensor, scale_tensor, Bias_tensor};
+    for (int i : indices) {
+      input_defs.push_back(util::RemoveWrapper(node->InputDefs()[i]));
+    }
+
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

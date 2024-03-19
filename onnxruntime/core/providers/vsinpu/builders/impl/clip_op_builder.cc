@@ -42,7 +42,7 @@ struct LowMax {
 template <typename T>
 struct ClipOpBuilder::ClipImpl {
   ClipImpl(vsi::npu::GraphEP* graph_ep, std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
-           std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs) {
+           std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs, const Node* node) {
     T min_default = clip_internal::LowMax<T>::low();
     T max_default = clip_internal::LowMax<T>::max();
 
@@ -63,8 +63,8 @@ struct ClipOpBuilder::ClipImpl {
       max_tensor->CopyDataFromTensor(max_data);
     }
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Clip>(static_cast<float>(*min_data), static_cast<float>(*max_data));
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
   }
 };
 
@@ -78,28 +78,28 @@ bool ClipOpBuilder::HandleBuildOp(vsi::npu::GraphEP* graph_ep,
     auto min = helper.Get("min", -3.402e+38f);
     auto max = helper.Get("max", 3.402e+38f);
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Clip>(min, max);
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
   } else {
     switch (inputs[0]->GetDataType()) {
       case tim::vx::DataType::INT8:
-        ClipImpl<int8_t>(graph_ep, inputs, outputs);
+        ClipImpl<int8_t>(graph_ep, inputs, outputs, node);
         break;
       case tim::vx::DataType::UINT8:
-        ClipImpl<uint8_t>(graph_ep, inputs, outputs);
+        ClipImpl<uint8_t>(graph_ep, inputs, outputs, node);
         break;
       case tim::vx::DataType::INT16:
-        ClipImpl<int16_t>(graph_ep, inputs, outputs);
+        ClipImpl<int16_t>(graph_ep, inputs, outputs, node);
         break;
       case tim::vx::DataType::INT32:
-        ClipImpl<int32_t>(graph_ep, inputs, outputs);
+        ClipImpl<int32_t>(graph_ep, inputs, outputs, node);
         break;
       case tim::vx::DataType::FLOAT16:
-        ClipImpl<Ort::Float16_t>(graph_ep, inputs, outputs);
+        ClipImpl<Ort::Float16_t>(graph_ep, inputs, outputs, node);
         break;
       case tim::vx::DataType::FLOAT32:
       default:
-        ClipImpl<float>(graph_ep, inputs, outputs);
+        ClipImpl<float>(graph_ep, inputs, outputs, node);
         break;
     }
   }

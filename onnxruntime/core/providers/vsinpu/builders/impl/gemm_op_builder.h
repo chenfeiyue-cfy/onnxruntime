@@ -36,6 +36,12 @@ class GemmOpBuilder : public BaseOpBuilder {
       LOGS_DEFAULT(WARNING) << "Cannot support Gemm Op with transA && transB both be true.";
       return false;
     }
+    for(auto input : node ->InputDefs()){
+      if(*input->Type() == "tensor(int64)") {
+        LOGS_DEFAULT(WARNING) << "Cannot support int64 Gemm operation.";
+        return false;
+      }
+    }
     return true;
   }
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
@@ -69,7 +75,8 @@ class GemmOpBuilder : public BaseOpBuilder {
       auto matmul_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Matmul>(
           trans_A, trans_B);
       (*matmul_op).BindInput(input_A).BindInput(input_B).BindOutput(output);
-      graph_ep->GetOps().push_back(std::move(matmul_op));
+      auto node_info = graph_ep->ConstructNodeIO(std::move(matmul_op), std::vector<onnxruntime::NodeArg*>(), std::vector<onnxruntime::NodeArg*>());
+      graph_ep->GetOps().push_back(node_info);
     };
 
     auto multiply_impl = [&](std::shared_ptr<tim::vx::Tensor> input,
@@ -77,7 +84,8 @@ class GemmOpBuilder : public BaseOpBuilder {
                              std::shared_ptr<tim::vx::Tensor> output) {
       auto multiply_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Multiply>();
       (*multiply_op).BindInput(input).BindInput(coef).BindOutput(output);
-      graph_ep->GetOps().push_back(std::move(multiply_op));
+      auto node_info = graph_ep->ConstructNodeIO(std::move(multiply_op), std::vector<onnxruntime::NodeArg*>(), std::vector<onnxruntime::NodeArg*>());
+      graph_ep->GetOps().push_back(node_info);
     };
 
     auto add_impl = [&](std::shared_ptr<tim::vx::Tensor> input_A,
@@ -85,7 +93,8 @@ class GemmOpBuilder : public BaseOpBuilder {
                         std::shared_ptr<tim::vx::Tensor> output) {
       auto add_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Add>();
       (*add_op).BindInput(input_A).BindInput(input_B).BindOutput(output);
-      graph_ep->GetOps().push_back(std::move(add_op));
+      auto node_info = graph_ep->ConstructNodeIO(std::move(add_op), std::vector<onnxruntime::NodeArg*>(), std::vector<onnxruntime::NodeArg*>());
+      graph_ep->GetOps().push_back(node_info);
     };
 
     auto AB_output = outputs[0];
