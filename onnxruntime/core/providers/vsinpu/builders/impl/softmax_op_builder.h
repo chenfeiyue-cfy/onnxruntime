@@ -67,17 +67,22 @@ class SoftmaxOpBuilder : public BaseOpBuilder {
       auto softmax_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, 0);
       auto reshaped_output_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(inputs[0]->GetShape());
 
-      (*reshape_input_op).BindInputs(inputs).BindOutput(reshaped_input);
+      (*reshape_input_op).BindOutput(reshaped_input);
+      auto reshape_in_info = graph_ep->ConstructNodeIO(std::move(reshape_input_op), util::RemoveWrapper(node->InputDefs()), std::vector<NodeArg*>());
       (*softmax_op).BindInput(reshaped_input).BindOutput(reshaped_output);
-      (*reshaped_output_op).BindInput(reshaped_output).BindOutput(outputs[0]);
-      graph_ep->GetOps().push_back(std::move(reshape_input_op));
-      graph_ep->GetOps().push_back(std::move(softmax_op));
-      graph_ep->GetOps().push_back(std::move(reshaped_output_op));
+      auto softmax_info = graph_ep->ConstructNodeIO(std::move(softmax_op), std::vector<NodeArg*>(), std::vector<NodeArg*>());
+      (*reshaped_output_op).BindInput(reshaped_output);
+      auto reshape_out_info = graph_ep->ConstructNodeIO(std::move(reshaped_output_op), std::vector<NodeArg*>(), util::RemoveWrapper(node->OutputDefs()));
+
+      graph_ep->GetOps().push_back(reshape_in_info);
+      graph_ep->GetOps().push_back(softmax_info);
+      graph_ep->GetOps().push_back(reshape_out_info);
+
     } else {
       axis = util::ReverseAxis(axis, inputs[0]->GetShape().size());
       auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, static_cast<uint32_t>(axis));
-      (*op).BindInputs(inputs).BindOutputs(outputs);
-      graph_ep->GetOps().push_back(std::move(op));
+      auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+      graph_ep->GetOps().push_back(node_info);
     }
     return true;
   }

@@ -57,29 +57,25 @@ bool QuantizeLinearOpBuilder::IsOpSupported(const onnxruntime::GraphViewer& grap
 template <typename T1, typename T2>
 struct QuantizeLinearOpBuilder::QuantizeImpl {
   QuantizeImpl(vsi::npu::GraphEP* graph_ep, std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
-               std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs) {
+               std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs, const Node* node) {
     T1 scale;
     inputs[scale_tensor]->CopyDataFromTensor(&scale);
     T2 zero_point = 0;
     if (inputs.size() == 3) {
       inputs[zero_point_tensor]->CopyDataFromTensor(&zero_point);
     }
-
     tim::vx::Quantization quant(tim::vx::QuantType::ASYMMETRIC, static_cast<float>(scale), static_cast<int32_t>(zero_point));
     tim::vx::TensorSpec OutSpec(outputs[0]->GetSpec());
     OutSpec.SetQuantization(quant);
     auto real_output = graph_ep->GetGraph()->CreateTensor(OutSpec);
-    for (auto& IO : graph_ep->GetGraphOutputs()) {
-      if (IO->tensor.get() == outputs[0].get()) {
-        IO->tensor = real_output;
-      }
-    }
-    outputs[0] = real_output;
+    auto output_defs = node->OutputDefs();
+    graph_ep->UpdateTensorMap(output_defs[0]->Name(), real_output);
 
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
-    (*op).SetRoundingPolicy(tim::vx::OverflowPolicy::SATURATE,tim::vx::RoundingPolicy::RTNE);
-    (*op).BindInput(inputs[0]).BindOutput(real_output);
-    graph_ep->GetOps().push_back(std::move(op));
+    std::vector<NodeArg*> input_defs;
+    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[input_tensor]));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
   }
 };
 
@@ -93,48 +89,48 @@ bool QuantizeLinearOpBuilder::HandleBuildOp(vsi::npu::GraphEP* graph_ep,
     case tim::vx::DataType::FLOAT32:
       switch (outputs[0]->GetDataType()) {
         case tim::vx::DataType::INT8:
-          QuantizeImpl<float, int8_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<float, int8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT8:
-          QuantizeImpl<float, uint8_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<float, uint8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::INT16:
-          QuantizeImpl<float, int16_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<float, int16_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT16:
-          QuantizeImpl<float, uint16_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<float, uint16_t>(graph_ep, inputs, outputs, node);
           break;
       }
       break;
     case tim::vx::DataType::FLOAT16:
       switch (outputs[0]->GetDataType()) {
         case tim::vx::DataType::INT8:
-          QuantizeImpl<Ort::Float16_t, int8_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<Ort::Float16_t, int8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT8:
-          QuantizeImpl<Ort::Float16_t, uint8_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<Ort::Float16_t, uint8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::INT16:
-          QuantizeImpl<Ort::Float16_t, int16_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<Ort::Float16_t, int16_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT16:
-          QuantizeImpl<Ort::Float16_t, uint16_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<Ort::Float16_t, uint16_t>(graph_ep, inputs, outputs, node);
           break;
       }
       break;
     case tim::vx::DataType::INT32:
       switch (outputs[0]->GetDataType()) {
         case tim::vx::DataType::INT8:
-          QuantizeImpl<int32_t, int8_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<int32_t, int8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT8:
-          QuantizeImpl<int32_t, uint8_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<int32_t, uint8_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::INT16:
-          QuantizeImpl<int32_t, int16_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<int32_t, int16_t>(graph_ep, inputs, outputs, node);
           break;
         case tim::vx::DataType::UINT16:
-          QuantizeImpl<int32_t, uint16_t>(graph_ep, inputs, outputs);
+          QuantizeImpl<int32_t, uint16_t>(graph_ep, inputs, outputs, node);
           break;
       }
       break;

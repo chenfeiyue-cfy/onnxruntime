@@ -92,10 +92,14 @@ tim::vx::ShapeType OnnxShapeToTIMVXShape(const onnxruntime::TensorShape ts) {
 
 std::string PrintNode(const onnxruntime::NodeArg& node_arg) {
   auto shape = node_arg.Shape();
-  if (shape == nullptr || shape->dim_size() == 0) {
+  if (shape == nullptr) {
     return "<null>";
   }
   std::string s = node_arg.Name() + ":<";
+  if (shape->dim_size() == 0) {
+    s += "1>, is a scalar";
+    return s;
+  }
   for (int i = 0; i < shape->dim_size(); i++) {
     auto dim = shape->dim(i);
     std::string s1;
@@ -305,6 +309,18 @@ std::vector<int32_t> ReverseAxis(std::vector<int32_t> origin_axes, int32_t lengt
   }
   std::sort(axes.begin(), axes.end());
   return axes;
+}
+
+std::vector<NodeArg*> RemoveWrapper(ConstPointerContainer<std::vector<NodeArg*>> constPtrContainer) {
+  std::vector<onnxruntime::NodeArg*> nodeArgsVector;
+  for (const auto& nodeArgPtr : constPtrContainer) {
+    nodeArgsVector.push_back(const_cast<onnxruntime::NodeArg*>(nodeArgPtr));
+  }
+  return nodeArgsVector;
+}
+
+NodeArg* RemoveWrapper(const NodeArg* onnxNodeArg){
+  return const_cast<NodeArg*> (onnxNodeArg);
 }
 
 }  // namespace util

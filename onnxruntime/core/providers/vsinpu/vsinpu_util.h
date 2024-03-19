@@ -73,6 +73,9 @@ int32_t ReverseAxis(int32_t origin_axis, int32_t length);
 
 std::vector<int32_t> ReverseAxis(std::vector<int32_t> origin_axes, int32_t length);
 
+std::vector<NodeArg*> RemoveWrapper(ConstPointerContainer<std::vector<NodeArg*>> constContainer);
+NodeArg* RemoveWrapper(const NodeArg* onnxNodeArg);
+
 }  // namespace util
 }  // namespace npu
 }  // namespace vsi

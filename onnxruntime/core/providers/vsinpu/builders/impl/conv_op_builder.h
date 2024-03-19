@@ -63,7 +63,7 @@ class ConvOpBuilder : public BaseOpBuilder {
                                          : default_vec);
     auto dilation =
         helper.Get("dilations", is_1d_conv ? std::vector<uint32_t>{default_uint}
-                                          : default_vec);
+                                           : default_vec);
 
     std::shared_ptr<tim::vx::Operation> op;
     if (padtype != "NOTSET") {  // array "pads" is not set
@@ -100,7 +100,7 @@ class ConvOpBuilder : public BaseOpBuilder {
         }
       }
     } else {
-      auto pads = helper.Get("pads", std::vector<uint32_t>{0U,0U});
+      auto pads = helper.Get("pads", std::vector<uint32_t>{0U, 0U});
       if (group != 1) {
         if (is_1d_conv) {
           op = graph_ep->GetGraph()
@@ -138,8 +138,8 @@ class ConvOpBuilder : public BaseOpBuilder {
         }
       }
     }
-    op->BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

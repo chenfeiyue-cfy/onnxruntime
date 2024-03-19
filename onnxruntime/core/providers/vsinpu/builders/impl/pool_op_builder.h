@@ -53,7 +53,8 @@ class BasePoolOpBuilder : public BaseOpBuilder {
                        const std::array<uint32_t, 2>& strides,
                        const std::array<uint32_t, 4>& pads,
                        bool is_global,
-                       const tim::vx::RoundType ceil_mode) {
+                       const tim::vx::RoundType ceil_mode,
+                       const Node* node) {
     const bool is_1d_pool = inputs[0]->GetShape().size() == 3;
     std::shared_ptr<tim::vx::Operation> op;
 
@@ -74,8 +75,8 @@ class BasePoolOpBuilder : public BaseOpBuilder {
       }
     }
 
-    op->BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(op);
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
   tim::vx::PoolType pool_type_;
@@ -96,7 +97,7 @@ class TraditionalPoolOpBuilder : public BasePoolOpBuilder {
     auto pads = helper.Get("pads", std::vector<uint32_t>{0U, 0U, 0U, 0U});
     tim::vx::RoundType ceil_mode = helper.Get("ceil_mode", 0U) == 0 ? tim::vx::RoundType::FLOOR : tim::vx::RoundType::CEILING;
     return CreatePoolingOp(graph_ep, inputs, outputs,
-                           {ksize[1], ksize[0]}, {strides[1], strides[0]}, {pads[1], pads[3], pads[0], pads[2]}, false, ceil_mode);
+                           {ksize[1], ksize[0]}, {strides[1], strides[0]}, {pads[1], pads[3], pads[0], pads[2]}, false, ceil_mode, node);
   }
 };
 
@@ -111,7 +112,7 @@ class GlobalPoolOpBuilder : public BasePoolOpBuilder {
                      const Node* node) override {
     NodeAttrHelper helper(*node);
     tim::vx::RoundType ceil_mode = helper.Get("ceil_mode", 0U) == 0 ? tim::vx::RoundType::FLOOR : tim::vx::RoundType::CEILING;
-    return CreatePoolingOp(graph_ep, inputs, outputs, {}, {}, {}, true, ceil_mode);
+    return CreatePoolingOp(graph_ep, inputs, outputs, {}, {}, {}, true, ceil_mode, node);
   }
 };
 

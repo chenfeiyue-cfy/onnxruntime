@@ -79,8 +79,10 @@ class ReshapeOpBuilder : public BaseOpBuilder {
     std::vector<uint32_t> new_shape_uint32(new_shape.begin(), new_shape.end());
     std::reverse(new_shape_uint32.begin(), new_shape_uint32.end());
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(new_shape_uint32);
-    (*op).BindInput(inputs[0]).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    std::vector<NodeArg*> input_defs;
+    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[0]));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };
@@ -117,8 +119,8 @@ class TransposeOpBuilder : public BaseOpBuilder {
       timvx_perm.push_back(def_val.size() - 1 - def_val[def_val.size() - i - 1]);
     }
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Transpose>(timvx_perm);
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

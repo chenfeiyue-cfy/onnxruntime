@@ -51,8 +51,8 @@ class ConcatOpBuilder : public BaseOpBuilder {
     auto axis = helper.Get("axis", 0);
     axis = util::ReverseAxis(axis, inputs[0]->GetShape().size());
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Concat>(static_cast<uint32_t>(axis), inputs.size());
-    (*op).BindInputs(inputs).BindOutputs(outputs);
-    graph_ep->GetOps().push_back(std::move(op));
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

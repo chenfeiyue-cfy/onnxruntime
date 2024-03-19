@@ -172,7 +172,12 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
     WeightSpec.SetQuantization(WeightQuant);
     tim::vx::TensorSpec OutputSpec(outputs[0]->GetSpec());
     OutputSpec.SetQuantization(OutputQuant);
-    auto input_tensor = graph_ep->GetGraph()->CreateTensor(InputSpec);
+    std::shared_ptr<tim::vx::Tensor> input_tensor = nullptr;
+    if (inputs[INPUT_TENSOR]->GetQuantization().Type() != tim::vx::QuantType::NONE) {
+      input_tensor = inputs[INPUT_TENSOR];
+    } else {
+      input_tensor = graph_ep->GetGraph()->CreateTensor(InputSpec);
+    }
     auto weight_tensor = graph_ep->GetGraph()->CreateTensor(WeightSpec);
     auto output_tensor = graph_ep->GetGraph()->CreateTensor(OutputSpec);
     std::vector<uint8_t> weight_data(inputs[WEIGHT_TENSOR]->GetSpec().GetElementNum());
@@ -227,27 +232,24 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
       }
     }
 
+    graph_ep->UpdateTensorMap(node->InputDefs()[INPUT_TENSOR]->Name(), input_tensor);
+    graph_ep->UpdateTensorMap(node->InputDefs()[WEIGHT_TENSOR]->Name(), weight_tensor);
+    graph_ep->UpdateTensorMap(node->OutputDefs()[0]->Name(), output_tensor);
+
+    std::vector<NodeArg*> input_defs;
+    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[INPUT_TENSOR]));
+    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[WEIGHT_TENSOR]));
     if (inputs.size() == 9) {
       tim::vx::TensorSpec BiasSpec(inputs[BIAS_TENSOR]->GetSpec());
       BiasSpec.SetQuantization(BiasQuant);
-      inputs[8]->CopyDataFromTensor(biasdata.data());
+      inputs[BIAS_TENSOR]->CopyDataFromTensor(biasdata.data());
       auto bias_tensor = graph_ep->GetGraph()->CreateTensor(BiasSpec, biasdata.data());
-      op->BindInput(input_tensor).BindInput(weight_tensor).BindInput(bias_tensor).BindOutput(output_tensor);
-    } else {
-      op->BindInput(input_tensor).BindInput(weight_tensor).BindOutput(output_tensor);
+      graph_ep->UpdateTensorMap(node->InputDefs()[BIAS_TENSOR]->Name(), bias_tensor);
+      input_defs.push_back(util::RemoveWrapper(node->InputDefs()[BIAS_TENSOR]));
     }
 
-    for (auto& IO : graph_ep->GetGraphInputs()) {
-      if (IO->tensor.get() == inputs[0].get()) {
-        IO->tensor = input_tensor;
-      }
-    }
-    for (auto& IO : graph_ep->GetGraphOutputs()) {
-      if (IO->tensor.get() == outputs[0].get()) {
-        IO->tensor = output_tensor;
-      }
-    }
-    outputs[0] = output_tensor;
+    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
+    graph_ep->GetOps().push_back(node_info);
     return true;
   }
 };

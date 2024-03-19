@@ -42,6 +42,12 @@ struct GraphIOInfo {
   TensorShape shape;
 };
 
+struct NodeIOInfo {
+  std::shared_ptr<tim::vx::Operation> op_;
+  std::vector<std::string> input_names_;
+  std::vector<std::string> output_names_;
+};
+
 class GraphEP {
  public:
   explicit GraphEP();
@@ -50,7 +56,7 @@ class GraphEP {
                           const Node* node);
   bool& GetCompiled() { return compiled_; }
   std::shared_ptr<tim::vx::Graph>& GetGraph() { return graph_; }
-  std::vector<std::shared_ptr<tim::vx::Operation>>& GetOps() { return ops_; }
+  std::vector<std::shared_ptr<NodeIOInfo>>& GetOps() { return ops_; }
   std::map<std::string, std::shared_ptr<tim::vx::Tensor>>& GetTensors() {
     return tensors_;
   }
@@ -63,6 +69,12 @@ class GraphEP {
     return graph_outputs_;
   };
 
+  void UpdateTensorMap(std::string name, std::shared_ptr<tim::vx::Tensor> dst_tensor);
+
+  std::shared_ptr<NodeIOInfo> ConstructNodeIO(const std::shared_ptr<tim::vx::Operation>& op, std::vector<NodeArg*>input_arg, std::vector<NodeArg*>output_arg);
+
+  bool BindTensors(const std::shared_ptr<NodeIOInfo>& nodeio_info);
+
   std::shared_ptr<tim::vx::Tensor> MapTIMVXTensor(
       std::shared_ptr<tim::vx::Graph>& graph, const NodeArg* arg,
       const GraphViewer* graph_viewer, tim::vx::TensorAttribute attribute);
@@ -71,7 +83,7 @@ class GraphEP {
   std::shared_ptr<tim::vx::Context> context_;
   std::shared_ptr<tim::vx::Graph> graph_;
   std::map<std::string, std::shared_ptr<tim::vx::Tensor>> tensors_;
-  std::vector<std::shared_ptr<tim::vx::Operation>> ops_;
+  std::vector<std::shared_ptr<NodeIOInfo>> ops_;
   std::vector<std::shared_ptr<GraphIOInfo>> graph_inputs_;
   std::vector<std::shared_ptr<GraphIOInfo>> graph_outputs_;
   bool compiled_;

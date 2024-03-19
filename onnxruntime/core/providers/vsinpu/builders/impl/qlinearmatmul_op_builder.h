@@ -55,7 +55,7 @@ class QLinearMatMulOpBuilder : public BaseOpBuilder {
     }
 
     if (input_defs[A_scale]->Shape()->dim_size() != 1 || input_defs[B_scale]->Shape()->dim_size() != 1 || input_defs[out_scale]->Shape()->dim_size() != 1) {
-      LOGS_DEFAULT(ERROR) << "Per channel quantized output is not supported in QuantizeLinearOp.";
+      LOGS_DEFAULT(ERROR) << "Per channel quantized input/output is not supported in QuantizeLinearOp.";
       return false;
     }
 
