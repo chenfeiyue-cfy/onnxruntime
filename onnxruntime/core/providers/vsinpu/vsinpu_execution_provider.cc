@@ -350,7 +350,7 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
                             << graph_viewer.IsInitializedTensor(tensor->Name());
       auto input = std::make_shared<vsi::npu::GraphIOInfo>();
       input->name = tensor->Name();
-      if (graph_viewer.IsInitializedTensor(tensor->Name())) {
+      if (graph_viewer.IsConstantInitializer(tensor->Name(),true)) {
         input->is_initializer = true;
       } else {
         input->is_initializer = false;

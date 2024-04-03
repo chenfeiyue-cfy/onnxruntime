@@ -65,7 +65,7 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
       return false;
     }
 
-    if (!graph_viewer.IsInitializedTensor(input_defs[INPUT_TENSOR_SCALE]->Name()) || !graph_viewer.IsInitializedTensor(input_defs[WEIGHT_TENSOR]->Name())) {
+    if (!graph_viewer.IsConstantInitializer(input_defs[INPUT_TENSOR_SCALE]->Name(), true) || !graph_viewer.IsConstantInitializer(input_defs[WEIGHT_TENSOR]->Name(), true)) {
       LOGS_DEFAULT(ERROR) << "Not support quantization definitions or weights that are not constant yet.";
       return false;
     }
@@ -122,7 +122,8 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
         w_zp = getParamAsVector<uint8_t>(inputs[WEIGHT_TENSOR_ZP]);
       int32_t value = std::visit([](auto& vec) {
         return static_cast<int32_t>(vec[0]);
-      }, w_zp);
+      },
+                                 w_zp);
       std::vector<int32_t> timvx_w_zp(w_scale.size(), value);
       if (timvx_w_zp[0] != 0) {
         WeightQuant.SetType(tim::vx::QuantType::ASYMMETRIC_PER_CHANNEL);
