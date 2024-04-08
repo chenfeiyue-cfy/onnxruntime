@@ -48,7 +48,7 @@ class BatchNormOpBuilder : public BaseOpBuilder {
       LOGS_DEFAULT(ERROR) << "VSINPU does not support 'spatial' parameter.";
       return false;
     }
-    if (!graph_viewer.IsInitializedTensor(input_defs[scale_tensor]->Name())) {
+    if (!graph_viewer.IsConstantInitializer(input_defs[scale_tensor]->Name(), true)) {
       LOGS_DEFAULT(ERROR) << "Not support mean/var/gamma/beta set as dynamic input yet.";
       return false;
     }

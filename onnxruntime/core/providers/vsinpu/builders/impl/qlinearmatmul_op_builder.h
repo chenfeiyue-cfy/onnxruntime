@@ -47,7 +47,7 @@ class QLinearMatMulOpBuilder : public BaseOpBuilder {
       if (def->Name() == A_def->Name() || def->Name() == B_def->Name())
         continue;
       else {
-        if (!graph_viewer.IsInitializedTensor(def->Name())) {
+        if (!graph_viewer.IsConstantInitializer(def->Name(), true)) {
           LOGS_DEFAULT(WARNING) << "Scale and zero point must be known before setting graph.";
           return false;
         }

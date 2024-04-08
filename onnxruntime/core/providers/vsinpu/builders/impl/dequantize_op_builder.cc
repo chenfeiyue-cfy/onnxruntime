@@ -42,7 +42,7 @@ bool DequantizeLinearOpBuilder::IsOpSupported(const onnxruntime::GraphViewer& gr
     LOGS_DEFAULT(WARNING) << "Not support block quantization.";
     return false;
   }
-  if (!graph_viewer.IsInitializedTensor(input_defs[scale_tensor]->Name()) || (input_defs.size() == 3 && !graph_viewer.IsInitializedTensor(input_defs[zero_point_tensor]->Name()))) {
+  if (!graph_viewer.IsConstantInitializer(input_defs[scale_tensor]->Name(), true) || (input_defs.size() == 3 && !graph_viewer.IsConstantInitializer(input_defs[zero_point_tensor]->Name(), true))) {
     LOGS_DEFAULT(WARNING) << "Only support const scale / zero pint input.";
     return false;
   }

@@ -44,14 +44,16 @@ class ConvOpBuilder : public BaseOpBuilder {
                      const Node* node) override {
     auto input_tensor = inputs[0];
     auto weight_tensor = inputs[1];
+    auto OutChannel_idx = weight_tensor->GetShape().size() - 1;
     const bool is_1d_conv =
         weight_tensor->GetShape().size() == 3 ? true : false;
     NodeAttrHelper helper(*node);
     auto padtype = helper.Get("auto_pad", std::string(""));
     auto group = helper.Get("group", static_cast<uint32_t>(1));
 
-    auto op_type = group != 1 ? (is_1d_conv ? "GroupConv1D" : "GroupConv2D")
-                              : (is_1d_conv ? "Conv1D" : "Conv2D");
+    std::string op_type = (group != 1 && group == weight_tensor->GetShape()[OutChannel_idx]) ? "DepthwiseConv" : (group != 1) ? "GroupConv"
+                                                                                                                              : "Conv";
+    op_type += is_1d_conv ? "1D" : "2D";
     std::string op_name = std::string("Creating ") + op_type + " Op";
     LOGS_DEFAULT(INFO) << op_name;
 
@@ -67,7 +69,7 @@ class ConvOpBuilder : public BaseOpBuilder {
 
     std::shared_ptr<tim::vx::Operation> op;
     if (padtype != "NOTSET") {  // array "pads" is not set
-      if (group != 1) {
+      if (group != 1 && group != weight_tensor->GetShape()[OutChannel_idx]) {
         if (is_1d_conv) {
           op = graph_ep->GetGraph()
                    ->CreateOperation<tim::vx::ops::GroupedConv1d>(
@@ -85,9 +87,10 @@ class ConvOpBuilder : public BaseOpBuilder {
                        tim::vx::DataLayout::WHCN, tim::vx::DataLayout::WHIcOc);
         }
       } else {
+        int32_t multiplier = group == 1 ? 0 : weight_tensor->GetShape()[OutChannel_idx] / input_tensor->GetShape()[OutChannel_idx - 1];
         if (is_1d_conv) {
           op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Conv1d>(
-              vsi::npu::util::GetPadType(padtype), stride[0], dilation[0], 0,
+              vsi::npu::util::GetPadType(padtype), stride[0], dilation[0], multiplier,
               tim::vx::DataLayout::WCN, tim::vx::DataLayout::WIcOc);
         } else {
           op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Conv2d>(
@@ -95,13 +98,13 @@ class ConvOpBuilder : public BaseOpBuilder {
               /* W_stride, H_stride*/
               std::array<uint32_t, 2>{stride[1], stride[0]},
               /* W_dilation, H_dilation*/
-              std::array<uint32_t, 2>{dilation[1], dilation[0]}, 0,
+              std::array<uint32_t, 2>{dilation[1], dilation[0]}, multiplier,
               tim::vx::DataLayout::WHCN, tim::vx::DataLayout::WHIcOc);
         }
       }
     } else {
       auto pads = helper.Get("pads", std::vector<uint32_t>{0U, 0U});
-      if (group != 1) {
+      if (group != 1 && group != weight_tensor->GetShape()[OutChannel_idx]) {
         if (is_1d_conv) {
           op = graph_ep->GetGraph()
                    ->CreateOperation<tim::vx::ops::GroupedConv1d>(
@@ -121,10 +124,11 @@ class ConvOpBuilder : public BaseOpBuilder {
                        tim::vx::DataLayout::WHCN, tim::vx::DataLayout::WHIcOc);
         }
       } else {
+        int32_t multiplier = group == 1 ? 0 : weight_tensor->GetShape()[OutChannel_idx] / input_tensor->GetShape()[OutChannel_idx - 1];
         if (is_1d_conv) {
           op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Conv1d>(
               std::array<uint32_t, 2>{pads[0], pads[1]}, stride[0], dilation[0],
-              0, tim::vx::DataLayout::WCN, tim::vx::DataLayout::WIcOc);
+              multiplier, tim::vx::DataLayout::WCN, tim::vx::DataLayout::WIcOc);
         } else {
           op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Conv2d>(
               /* W_begin,W_end, H_begin,H_end*/ std::array<uint32_t,
@@ -133,7 +137,7 @@ class ConvOpBuilder : public BaseOpBuilder {
               /* W_stride, H_stride*/
               std::array<uint32_t, 2>{stride[1], stride[0]},
               /* W_dilation, H_dilation*/
-              std::array<uint32_t, 2>{dilation[1], dilation[0]}, 0,
+              std::array<uint32_t, 2>{dilation[1], dilation[0]}, multiplier,
               tim::vx::DataLayout::WHCN, tim::vx::DataLayout::WHIcOc);
         }
       }

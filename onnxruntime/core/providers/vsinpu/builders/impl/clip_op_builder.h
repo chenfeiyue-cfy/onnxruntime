@@ -36,7 +36,7 @@ class ClipOpBuilder final : public BaseOpBuilder {
       return false;
     }
     if (node->SinceVersion() > 6) {
-      if (node->InputDefs().size() > 1 && !graph_viewer.IsInitializedTensor(node->InputDefs()[1]->Name())) {
+      if (node->InputDefs().size() > 1 && !graph_viewer.IsConstantInitializer(node->InputDefs()[1]->Name(),true)) {
         LOGS_DEFAULT(ERROR) << "Min/Max value must be const input or attribute.";
         return false;
       }

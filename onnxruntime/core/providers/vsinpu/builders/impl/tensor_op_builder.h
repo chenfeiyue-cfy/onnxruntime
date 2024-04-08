@@ -31,7 +31,7 @@ class ReshapeOpBuilder : public BaseOpBuilder {
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
     auto input_defs = node->InputDefs();
-    if (!graph_viewer.IsInitializedTensor(input_defs[1]->Name())) {
+    if (!graph_viewer.IsConstantInitializer(input_defs[1]->Name(), true)) {
       LOGS_DEFAULT(VERBOSE) << "New shape of reshape must be known";
       return false;
     }
