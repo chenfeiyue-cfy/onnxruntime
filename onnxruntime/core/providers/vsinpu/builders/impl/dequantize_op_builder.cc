@@ -72,6 +72,11 @@ struct DequantizeLinearOpBuilder::DequantizeImpl {
       real_input = inputs[input_tensor];
     } else {
       real_input = graph_ep->GetGraph()->CreateTensor(InSpec);
+      if(inputs[input_tensor]->IsConstTensor()){
+        std::vector<T2> const_value(inputs[input_tensor]->GetSpec().GetElementNum());
+        inputs[input_tensor]->CopyDataFromTensor(const_value.data());
+        real_input->CopyDataToTensor(const_value.data());
+      }
       graph_ep->UpdateTensorMap(node->InputDefs()[input_tensor]->Name(), real_input);
     }
 
