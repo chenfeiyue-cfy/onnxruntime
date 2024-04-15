@@ -40,6 +40,9 @@
 #include "impl/quantize_op_builder.h"
 #include "impl/dequantize_op_builder.h"
 #include "impl/qlinearmatmul_op_builder.h"
+#include "impl/qlinear_binary_op_builder.h"
+#include "impl/qlinearconcat_op_builder.h"
+
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
@@ -88,6 +91,9 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("QuantizeLinear", QuantizeLinearOpBuilder),
     REGISTER_OP_BUILDER("DequantizeLinear", DequantizeLinearOpBuilder),
     REGISTER_OP_BUILDER("QLinearMatMul", QLinearMatMulOpBuilder),
+    REGISTER_OP_BUILDER("QLinearAdd", QLinearAddOpBuilder),
+    REGISTER_OP_BUILDER("QLinearMul", QLinearMulOpBuilder),
+    REGISTER_OP_BUILDER("QLinearConcat", QLinearConcatOpBuilder),
 
 #undef REGISTER_OP_BUILDER
 };
