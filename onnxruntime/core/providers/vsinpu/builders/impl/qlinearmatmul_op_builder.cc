@@ -73,12 +73,22 @@ struct QLinearMatMulOpBuilder::QMatMulImpl {
       real_A = inputs[matrixA];
     } else {
       real_A = graph_ep->GetGraph()->CreateTensor(ASpec);
+      if(inputs[matrixA]->IsConstTensor()){
+        std::vector<T2> const_value(inputs[matrixA]->GetSpec().GetElementNum());
+        inputs[matrixA]->CopyDataFromTensor(const_value.data());
+        real_A->CopyDataToTensor(const_value.data());
+      }
     }
     std::shared_ptr<tim::vx::Tensor> real_B = nullptr;
     if (inputs[matrixB]->GetQuantization().Type() != tim::vx::QuantType::NONE) {
       real_B = inputs[matrixB];
     } else {
       real_B = graph_ep->GetGraph()->CreateTensor(BSpec);
+      if(inputs[matrixB]->IsConstTensor()){
+        std::vector<T2> const_value(inputs[matrixB]->GetSpec().GetElementNum());
+        inputs[matrixB]->CopyDataFromTensor(const_value.data());
+        real_B->CopyDataToTensor(const_value.data());
+      }
     }
 
     auto real_out = graph_ep->GetGraph()->CreateTensor(OutSpec);

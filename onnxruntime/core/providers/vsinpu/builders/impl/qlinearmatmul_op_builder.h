@@ -53,9 +53,11 @@ class QLinearMatMulOpBuilder : public BaseOpBuilder {
         }
       }
     }
-
-    if (input_defs[A_scale]->Shape()->dim_size() != 1 || input_defs[B_scale]->Shape()->dim_size() != 1 || input_defs[out_scale]->Shape()->dim_size() != 1) {
-      LOGS_DEFAULT(ERROR) << "Per channel quantized input/output is not supported in QuantizeLinearOp.";
+    int64_t A_elements = util::GetTensorShape(*input_defs[A_scale]).Size();
+    int64_t B_elements = util::GetTensorShape(*input_defs[B_scale]).Size();
+    int64_t Out_elements = util::GetTensorShape(*input_defs[out_scale]).Size();
+    if (A_elements > 1 || B_elements > 1 || Out_elements > 1) {
+      LOGS_DEFAULT(ERROR) << "Per channel quantized input/output is not supported in QLinearMatmul Op.";
       return false;
     }
 

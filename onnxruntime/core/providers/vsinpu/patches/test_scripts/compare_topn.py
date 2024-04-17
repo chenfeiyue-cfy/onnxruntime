@@ -2,11 +2,11 @@ import sys
 
 def read_values(filename):
     with open(filename, 'r') as file:
-        values = [float(line.strip()) for line in file]
+        values = [(float(line.strip()), i + 1) for i, line in enumerate(file)]
     return values
 
 def top_n(values, N):
-    return sorted(values, reverse=True)[:N]
+    return sorted(values, key=lambda x: x[0], reverse=True)[:N]
 
 def compare_files(cpu_file, npu_file, N):
     cpu_values = read_values(cpu_file)
