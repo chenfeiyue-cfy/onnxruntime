@@ -34,22 +34,16 @@ class MatMulOpBuilder : public BaseOpBuilder {
       LOGS_DEFAULT(ERROR) << "Inner product of 1-D tensor is not supported in MatMul op.";
       return false;
     }
-    for(auto input : node ->InputDefs()){
-      if(*input->Type() == "tensor(int64)") {
-        LOGS_DEFAULT(WARNING) << "Cannot support int64 Gemm operation.";
-        return false;
-      }
-    }
     return true;
   }
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Matmul Op.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Matmul>();
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

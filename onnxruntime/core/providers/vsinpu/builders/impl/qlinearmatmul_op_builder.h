@@ -26,18 +26,18 @@
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-enum {
-  matrixA = 0,
-  A_scale = 1,
-  A_zero_point = 2,
-  matrixB = 3,
-  B_scale = 4,
-  B_zero_point = 5,
-  out_scale = 6,
-  out_zero_point = 7
-};
 
 class QLinearMatMulOpBuilder : public BaseOpBuilder {
+  enum {
+    matrixA = 0,
+    A_scale = 1,
+    A_zero_point = 2,
+    matrixB = 3,
+    B_scale = 4,
+    B_zero_point = 5,
+    out_scale = 6,
+    out_zero_point = 7
+  };
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
     auto input_defs = node->InputDefs();
@@ -66,11 +66,12 @@ class QLinearMatMulOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override;
-
- private:
-  template <typename T1, typename T2, typename T3>
-  struct QMatMulImpl;
+                     const NodeUnit& node_unit) override {
+    LOGS_DEFAULT(INFO) << "Creating QLinearMatmul Op.";
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Matmul>();
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    return true;
+  }
 };
 }  // namespace npu
 

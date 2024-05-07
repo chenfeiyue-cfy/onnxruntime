@@ -27,16 +27,11 @@
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-// template <typename T>
 class ClipOpBuilder final : public BaseOpBuilder {
-  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
+ bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
-    if (*node->InputDefs()[0]->Type() == "tensor(int64)") {
-      LOGS_DEFAULT(ERROR) << "Int64 datatype is only used to describe a param in TIM-VX.";
-      return false;
-    }
-    if (node->SinceVersion() > 6) {
-      if (node->InputDefs().size() > 1 && !graph_viewer.IsConstantInitializer(node->InputDefs()[1]->Name(),true)) {
+   if (node->SinceVersion() > 6) {
+      if (node->InputDefs().size() > 1 && !Contains(graph_viewer.GetAllInitializedTensors(), node->InputDefs()[1]->Name())) {
         LOGS_DEFAULT(ERROR) << "Min/Max value must be const input or attribute.";
         return false;
       }
@@ -47,7 +42,7 @@ class ClipOpBuilder final : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override;
+                     const NodeUnit& node_unit) override;
 
  private:
   template <typename T>

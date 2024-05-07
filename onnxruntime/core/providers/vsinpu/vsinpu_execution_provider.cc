@@ -24,17 +24,20 @@
 #include "core/framework/compute_capability.h"
 #include "vsinpu_execution_provider.h"
 #include "vsinpu_ep_graph.h"
-#include "builders/op_builder_factory.h"
 #include "builders/op_builder.h"
+#include "builders/op_builder_factory.h"
 #include "core/framework/kernel_registry.h"
+#include "core/providers/shared/node_unit/node_unit.h"
+#include "core/providers/partitioning_utils.h"
+#include "vsinpu_util.h"
 
 using namespace ONNX_NAMESPACE;
 using namespace ::onnxruntime::logging;
 
 namespace onnxruntime {
-
 VSINPUExecutionProvider::VSINPUExecutionProvider(const VSINPUExecutionProviderInfo& info)
-    : IExecutionProvider{onnxruntime::kVSINPUExecutionProvider}, device_id_(info.device_id) {
+    : IExecutionProvider{onnxruntime::kVSINPUExecutionProvider},
+      device_id_(info.device_id) {
   AllocatorCreationInfo default_memory_info{
       [](int) {
         return std::make_unique<CPUAllocator>(
@@ -54,185 +57,9 @@ VSINPUExecutionProvider::VSINPUExecutionProvider(const VSINPUExecutionProviderIn
 
 VSINPUExecutionProvider::~VSINPUExecutionProvider() {}
 
-// If not partitioned, return a complete graph; else return a vector of subgraphs
-static void AppendClusterToSubGraph(const std::vector<NodeIndex>& nodes,
-                                    const std::vector<std::string>& onnx_inputs,
-                                    const std::vector<std::string>& onnx_outputs,
-                                    std::vector<std::unique_ptr<ComputeCapability>>& result) {
-  static size_t op_counter = 0;
-
-  auto meta_def = std::make_unique<IndexedSubGraph::MetaDef>();
-  meta_def->name = "VSINPUOp_" + std::to_string(++op_counter);
-  meta_def->since_version = 1;
-  meta_def->status = ONNX_NAMESPACE::EXPERIMENTAL;
-  meta_def->inputs = onnx_inputs;
-  meta_def->outputs = onnx_outputs;
-
-  std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
-  sub_graph->nodes = nodes;
-  sub_graph->SetMetaDef(std::move(meta_def));
-  result.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
-}
-
-// return a vector of unsupported nodes' index
-static std::vector<NodeIndex> GetUnsupportedNodeIndices(
-    const GraphViewer& graph_viewer,
-    /*out*/ std::unordered_set<std::string>& vsinpu_required_initializers) {
-  std::vector<NodeIndex> unsupported_nodes_idx;
-
-  for (const auto& node_idx : graph_viewer.GetNodesInTopologicalOrder()) {
-    auto node = graph_viewer.GetNode(node_idx);
-    if (vsi::npu::GraphEP::SupportedOp(graph_viewer, node)) {
-      // Collect inputs that are initializers
-      LOGS_DEFAULT(VERBOSE) << "node:" << node->OpType();
-      node->ForEachDef(
-          [&vsinpu_required_initializers, &graph_viewer](
-              const onnxruntime::NodeArg& node_arg, bool is_input) {
-            if (is_input &&
-                graph_viewer.GetAllInitializedTensors().count(node_arg.Name())) {
-              vsinpu_required_initializers.insert(node_arg.Name());
-              LOGS_DEFAULT(VERBOSE) << "Input tensor:" << vsi::npu::util::PrintNode(node_arg);
-            }
-          },
-          true);
-    } else {
-      LOGS_DEFAULT(WARNING) << "Unsupported node:" << node->OpType();
-      unsupported_nodes_idx.push_back(node_idx);
-    }
-  }
-
-  return unsupported_nodes_idx;
-}
-
-/**
- * Returns a vector clusters(or node_idx). For each unsupported node, the graph is split into 3
- * parts. supported_cluster + (UNsupported_node + rest_of_the_graph). This functions returns vector
- * of all supported_clusters by VSINPU
- */
-static std::vector<std::vector<NodeIndex>> GetPartitionedClusters(
-    const std::vector<NodeIndex>& topological_order,
-    const std::vector<NodeIndex>& unsupported_nodes) {
-  std::vector<std::vector<NodeIndex>> vsinpu_clusters;
-
-  auto prev = topological_order.begin();
-
-  for (const auto& unsup_node : unsupported_nodes) {
-    auto it = std::find(prev, topological_order.end(), unsup_node);
-    // Create a cluster vector[supported_node_idx, unsupported_node_idx) and append it to return
-    // list.
-    std::vector<NodeIndex> this_cluster{prev, it};
-    if (!this_cluster.empty()) {
-      vsinpu_clusters.push_back(std::move(this_cluster));
-    }
-    // Point prev to node idx past this unsuported node.
-    prev = ++it;
-  }
-
-  // Tail
-  std::vector<NodeIndex> this_cluster{prev, topological_order.end()};
-  if (!this_cluster.empty()) {
-    vsinpu_clusters.push_back(std::move(this_cluster));
-  }
-
-  return vsinpu_clusters;
-}
-
-// sort out every cluster's input/output
-static void GetIOofCluster(
-    const GraphViewer& graph_viewer,
-    const std::vector<NodeIndex>& cluster,
-    const std::unordered_set<std::string>& vsinpu_required_initializers,
-    /*out*/ std::vector<std::string>& cluster_inputs,
-    /*out*/ std::vector<std::string>& cluster_outputs) {
-  std::unordered_set<std::string> input_args;
-  std::vector<std::string> ordered_input_args;
-  std::unordered_set<std::string> output_args;
-  std::unordered_set<std::string> external_output_args;
-
-  for (const auto& node_idx : cluster) {
-    const auto& node = graph_viewer.GetNode(node_idx);
-
-    node->ForEachDef(
-        [&input_args, &ordered_input_args, &output_args](const NodeArg& node_arg,
-                                                         bool is_input) {
-          if (is_input) {
-            if (!input_args.count(node_arg.Name())) {
-              ordered_input_args.push_back(node_arg.Name());
-            }
-            input_args.insert(node_arg.Name());
-          } else {
-            output_args.insert(node_arg.Name());
-          }
-        },
-        true);
-
-    // Check if output of this node is used by nodes not in this_cluster. If yes add this to
-    // cluster outputs
-    for (auto it = node->OutputNodesBegin(); it != node->OutputNodesEnd(); ++it) {
-      const auto& ext_node = graph_viewer.GetNode((*it).Index());
-
-      if (std::find(cluster.begin(), cluster.end(), ext_node->Index()) == cluster.end()) {
-        // Node is external to this_cluster. Search through its inputs to find the output
-        // that is generated by this_cluster.
-        std::set<std::string> ext_node_inputs;
-        ext_node->ForEachDef(
-            [&ext_node_inputs](const onnxruntime::NodeArg& arg, bool is_input) {
-              if (is_input) {
-                ext_node_inputs.insert(arg.Name());
-              }
-            },
-            true);
-
-        for (const auto& out_def : node->OutputDefs()) {
-          if (ext_node_inputs.find(out_def->Name()) != ext_node_inputs.end()) {
-            external_output_args.insert(out_def->Name());
-          }
-        }
-      }
-    }
-  }  // end processing one cluster
-
-  // Extract initializers used by this_cluster.
-  std::unordered_set<std::string> original_graph_inputs;
-  for (const auto& node_arg : graph_viewer.GetInputsIncludingInitializers()) {
-    original_graph_inputs.insert(node_arg->Name());
-  }
-
-  const auto& initializers = graph_viewer.GetAllInitializedTensors();
-  std::vector<std::string> const_inputs;
-  for (const auto& in_arg : ordered_input_args) {
-    if ((initializers.count(in_arg) && !original_graph_inputs.count(in_arg)) ||
-        vsinpu_required_initializers.count(in_arg)) {
-      const_inputs.push_back(in_arg);
-    }
-  }
-
-  for (const auto& in_arg : ordered_input_args) {
-    if (!output_args.count(in_arg) &&
-        !((initializers.count(in_arg) && !original_graph_inputs.count(in_arg)) ||
-          vsinpu_required_initializers.count(in_arg))) {
-      cluster_inputs.push_back(in_arg);
-    }
-  }
-
-  for (const auto& in_arg : const_inputs) {
-    cluster_inputs.push_back(in_arg);
-  }
-
-  std::copy(external_output_args.begin(),
-            external_output_args.end(),
-            std::back_inserter(cluster_outputs));
-  for (const auto& node_arg : graph_viewer.GetOutputs()) {
-    const auto& name = node_arg->Name();
-    if (output_args.count(name) && !external_output_args.count(name)) {
-      cluster_outputs.push_back(name);
-    }
-  }
-}
-
-std::vector<std::unique_ptr<ComputeCapability>> VSINPUExecutionProvider::GetCapability(
-    const onnxruntime::GraphViewer& graph_viewer,
-    const IKernelLookup& /*kernel_lookup*/) const {
+std::vector<std::unique_ptr<ComputeCapability>>
+VSINPUExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_viewer,
+                                       const IKernelLookup& /*kernel_lookup*/) const {
   std::vector<std::unique_ptr<ComputeCapability>> result;
 
   if (graph_viewer.IsSubgraph()) {
@@ -250,59 +77,94 @@ std::vector<std::unique_ptr<ComputeCapability>> VSINPUExecutionProvider::GetCapa
       }
     }
   }
+  // Get all the NodeUnits in the graph_viewer
+  std::vector<std::unique_ptr<NodeUnit>> node_unit_holder;
+  std::unordered_map<const Node*, const NodeUnit*> node_unit_map;
+  std::tie(node_unit_holder, node_unit_map) = onnxruntime::GetAllNodeUnits(graph_viewer);
 
-  /* This is a list of initializers that nGraph considers as constants. Example weights, reshape
-     shape etc.
-     TODO: Support overridable initializers */
-  std::unordered_set<std::string> vsinpu_required_initializers;
-  const auto unsupported_nodes =
-      GetUnsupportedNodeIndices(graph_viewer, vsinpu_required_initializers);
+  // This holds the result of whether a NodeUnit is supported or not,
+  // to prevent nodes in a NodeUnit to be checked for multiple times
+  std::unordered_map<const NodeUnit*, bool> node_unit_supported_result;
+  node_unit_supported_result.reserve(node_unit_holder.size());
+  std::unordered_set<std::string> node_outputs_in_current_group{};
 
-  // If all ops are supported, no partitioning is required. Short-circuit and avoid splitting.
-  if (unsupported_nodes.empty()) {
-    std::vector<std::string> inputs;
-    std::vector<std::string> outputs;
+  const auto is_node_supported = [&](const Node& node) -> bool {
+    const NodeUnit* node_unit = node_unit_map.at(&node);
+    bool supported = false;
 
-    // Fill inputs with names
-    std::for_each(graph_viewer.GetInputs().begin(),
-                  graph_viewer.GetInputs().end(),
-                  [&inputs](const NodeArg* node_arg) { inputs.push_back(node_arg->Name()); });
-
-    /* In scenarios, when there are no inputs or all inputs being initializers,
-         ConstantFolding optimization in onnxruntime pre-computes the value.*/
-    if (inputs.empty()) {
-      return result;
+    // If we have visited one of the nodes in the node_unit, use the result directly
+    const auto it = node_unit_supported_result.find(node_unit);
+    if (it != node_unit_supported_result.cend()) {
+      supported = it->second;
+    } else {
+      // We only check the target node of the node unit
+      supported = vsi::npu::GraphEP::IsNodeSupportedInGroup(*node_unit, graph_viewer);
+      node_unit_supported_result[node_unit] = supported;
     }
 
-    // Initializers need to be part of meta_def->inputs
-    std::for_each(vsinpu_required_initializers.begin(),
-                  vsinpu_required_initializers.end(),
-                  [&inputs](const std::string& initializer) { inputs.push_back(initializer); });
+    LOGS_DEFAULT(VERBOSE) << "Node supported: [" << supported
+                          << "] Operator type: [" << node.OpType()
+                          << "] index: [" << node.Index()
+                          << "] name: [" << node.Name()
+                          << "] as part of the NodeUnit type: [" << node_unit->OpType()
+                          << "] index: [" << node_unit->Index()
+                          << "] name: [" << node_unit->Name()
+                          << "]";
 
-    // Fill outputs with names
-    std::for_each(graph_viewer.GetOutputs().begin(),
-                  graph_viewer.GetOutputs().end(),
-                  [&outputs](const NodeArg* node_arg) { outputs.push_back(node_arg->Name()); });
-
-    // Create and add this graph to result.
-    AppendClusterToSubGraph(graph_viewer.GetNodesInTopologicalOrder(), inputs, outputs, result);
-
-  } else {
-    const auto vsinpu_clusters =
-        GetPartitionedClusters(graph_viewer.GetNodesInTopologicalOrder(), unsupported_nodes);
-
-    for (const auto& this_cluster : vsinpu_clusters) {
-      std::vector<std::string> cluster_inputs, cluster_outputs;
-      GetIOofCluster(graph_viewer,
-                     this_cluster,
-                     vsinpu_required_initializers,
-                     cluster_inputs,
-                     cluster_outputs);
-
-      if (!cluster_inputs.empty()) {
-        AppendClusterToSubGraph(this_cluster, cluster_inputs, cluster_outputs, result);
+    if (supported) {
+      // We want to save all the output names of nodes in the current group for easy query
+      for (const auto* output : node.OutputDefs()) {
+        node_outputs_in_current_group.insert(output->Name());
       }
     }
+    return supported;
+  };
+
+  const auto on_group_closed = [&](const std::vector<const Node*>& group) -> bool {
+    // reset per-partition node group tracking
+    node_outputs_in_current_group.clear();
+    return true;
+  };
+
+  const auto gen_metadef_name = [&]() {
+    static size_t group_counter = 0;
+    return "VSINPU_" + std::to_string(++group_counter);
+  };
+  result = utils::CreateSupportedPartitions(graph_viewer, is_node_supported, on_group_closed,
+                                            gen_metadef_name, "VSINPU", kVSINPUExecutionProvider, &node_unit_map);
+  std::for_each(result.begin(), result.end(), [&graph_viewer](auto& capability) {
+    if (capability && capability->sub_graph && capability->sub_graph->GetMetaDef()) {
+      const auto* meta_def = capability->sub_graph->GetMetaDef();
+      bool has_any_non_constant_inputs = std::any_of(meta_def->inputs.begin(), meta_def->inputs.end(), [&graph_viewer](const auto& input) {
+        return !graph_viewer.IsConstantInitializer(input, true);
+      });
+
+      // ALL inputs are constant
+      if (!has_any_non_constant_inputs) {
+        capability.reset();
+      }
+    }
+  });
+
+  const auto num_of_partitions = result.size();
+  const auto num_of_supported_nodes = std::accumulate(
+      result.begin(), result.end(), size_t{0},
+      [](const auto& acc, const auto& partition) -> size_t {
+        return acc + (partition && partition->sub_graph ? partition->sub_graph->nodes.size() : 0);
+      });
+
+  const auto summary_msg = MakeString(
+      "VSINPUExecutionProvider::GetCapability,",
+      " number of partitions supported by VSINPU: ", num_of_partitions,
+      "; number of nodes in the graph: ", graph_viewer.NumberOfNodes(),
+      "; number of nodes supported by VSINPU: ", num_of_supported_nodes);
+
+  // If the graph is partitioned in multiple subgraphs, and this may impact performance,
+  // we want to give users a summary message at warning level.
+  if (num_of_partitions > 1) {
+    LOGS_DEFAULT(WARNING) << summary_msg;
+  } else {
+    LOGS_DEFAULT(INFO) << summary_msg;
   }
 
   return result;
@@ -311,6 +173,7 @@ std::vector<std::unique_ptr<ComputeCapability>> VSINPUExecutionProvider::GetCapa
 Status ComputeStateFunc(vsi::npu::GraphEP* graph_ep,
                         OrtKernelContext* context) {
   Ort::KernelContext ctx(context);
+  size_t num_in = ctx.GetInputCount();
   const size_t num_inputs = graph_ep->GetGraphInputs().size();
 
   for (size_t i = 0, j = 0; i < num_inputs; i++) {
@@ -342,19 +205,14 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
                                         std::vector<NodeComputeInfo>& node_compute_funcs) {
   for (const auto& fused_node_graph : fused_nodes_and_graphs) {
     const GraphViewer& graph_viewer = fused_node_graph.filtered_graph;
-    NodeComputeInfo compute_info;
-    std::shared_ptr<vsi::npu::GraphEP> graph_ep = std::make_shared<vsi::npu::GraphEP>();
+    std::shared_ptr<vsi::npu::GraphEP> graph_ep = std::make_shared<vsi::npu::GraphEP>(graph_viewer);
 
     for (auto tensor : graph_viewer.GetInputsIncludingInitializers()) {
       LOGS_DEFAULT(VERBOSE) << "subgraph input init:" << vsi::npu::util::PrintNode(*tensor) << "#"
                             << graph_viewer.IsInitializedTensor(tensor->Name());
       auto input = std::make_shared<vsi::npu::GraphIOInfo>();
       input->name = tensor->Name();
-      if (graph_viewer.IsConstantInitializer(tensor->Name(),true)) {
-        input->is_initializer = true;
-      } else {
-        input->is_initializer = false;
-      }
+      input->is_initializer = graph_viewer.IsConstantInitializer(tensor->Name(), true);
       graph_ep->GetGraphInputs().push_back(input);
     }
     for (auto tensor : graph_viewer.GetOutputs()) {
@@ -365,18 +223,17 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
       graph_ep->GetGraphOutputs().push_back(output);
     }
 
-    for (const auto& node_index : graph_viewer.GetNodesInTopologicalOrder()) {
-      auto node = graph_viewer.GetNode(node_index);
-      LOGS_DEFAULT(VERBOSE) << "sub node:" << node->OpType();
-      vsi::npu::SupportedBuiltinOps().at(node->OpType())->BuildOp(graph_ep.get(), graph_viewer, node);
-    }
+    auto node_indices = graph_viewer.GetNodesInTopologicalOrder();
+    for (const auto& node_index : node_indices) {
+      const auto node = graph_viewer.GetNode(node_index);
+      const NodeUnit& node_unit = graph_ep->GetNodeUnit(node);
 
-    for (const auto& node_info : graph_ep->GetOps()) {
-      if (node_info->input_names_.empty() && node_info->output_names_.empty())
+      // Only add op when we hit the target node
+      if (node != &node_unit.GetNode()) {
         continue;
-      else {
-        graph_ep->BindTensors(node_info);
       }
+      LOGS_DEFAULT(VERBOSE) << "Adding node: [" << node->OpType() << "]";
+      vsi::npu::SupportedBuiltinOps().at(node->OpType())->BuildOp(graph_ep.get(), graph_viewer, node_unit);
     }
 
     LOGS_DEFAULT(INFO) << "Verifying graph";
@@ -386,6 +243,7 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
     } else
       LOGS_DEFAULT(INFO) << "Graph has been verified successfully.";
 
+    NodeComputeInfo compute_info;
     compute_info.create_state_func = [graph_ep](ComputeContext* /*context*/,
                                                 FunctionState* state) {
       *state = graph_ep.get();
@@ -393,7 +251,7 @@ Status VSINPUExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fu
     };
 
     compute_info.compute_func =
-        [graph_ep, this](FunctionState state, const OrtApi* /* api */,
+        [graph_ep, this](FunctionState /*state*/, const OrtApi* /* api */,
                          OrtKernelContext* context) {
           std::lock_guard<OrtMutex> lock(this->GetMutex());
           Status res = ComputeStateFunc(graph_ep.get(), context);

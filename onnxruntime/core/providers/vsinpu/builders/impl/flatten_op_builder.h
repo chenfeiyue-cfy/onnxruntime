@@ -32,14 +32,14 @@ class FlattenOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Flatten Op.";
     std::vector<uint32_t> reshape_param;
     if (outputs[0]->GetShape().size() == 2)
       reshape_param = outputs[0]->GetShape();
     else {
       auto input_shape = inputs[0]->GetShape();
-      NodeAttrHelper helper(*node);
+      NodeAttrHelper helper(node_unit.GetNode());
       int64_t axis = helper.Get("axis", 1);
       axis = util::ReverseAxis(static_cast<int32_t>(axis), input_shape.size());
       uint32_t first_dim = 1;
@@ -51,8 +51,8 @@ class FlattenOpBuilder : public BaseOpBuilder {
       reshape_param.push_back(second_dim);
     }
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(reshape_param);
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

@@ -26,60 +26,136 @@
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-static bool IsTypeSupported(const NodeArg* node_arg) {
-  const auto* type_proto = node_arg->TypeAsProto();
-  if (!type_proto) {
+bool BaseOpBuilder::IsSupported(const onnxruntime::GraphViewer& graph_viewer,
+                                const NodeUnit& node_unit) const {
+  auto initializers = graph_viewer.GetAllInitializedTensors();
+  if (!HasSupportedOpSet(node_unit)) {
     return false;
   }
-
-  switch (type_proto->tensor_type().elem_type()) {
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_BOOL:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_FLOAT:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_FLOAT16:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT8:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT8:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT16:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT32:
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT64:
-      return true;
-    default:
-      return false;
+  if (!HasSupportedInputOutputs(initializers, node_unit)) {
+    return false;
   }
+  return IsOpSupported(graph_viewer, &node_unit.GetNode());
 }
 
-bool BaseOpBuilder::IsSupported(const onnxruntime::GraphViewer& graph_viewer,
-                                const Node* node) const {
-  bool datatype_supported = true;
-  node->ForEachDef([&datatype_supported](const onnxruntime::NodeArg& node_arg,
-                                         bool /*is_input*/) {
-    datatype_supported &= IsTypeSupported(&node_arg);
-  });
-  if (!datatype_supported) {
-    LOGS_DEFAULT(VERBOSE) << "DataType is not supported by TIM-VX!";
+bool BaseOpBuilder::HasSupportedInputOutputs(const InitializedTensorSet& initializers,
+                                             const NodeUnit& node_unit) const {
+  // We do not support unknown(null) input shape
+  auto has_supported_shape = [](const NodeArg& node_arg, const std::string& name, const std::string& op_type) {
+    const auto* shape_proto = node_arg.Shape();
+    if (!shape_proto) {
+      LOGS_DEFAULT(WARNING) << "Node [" << name << "] type [" << op_type
+                            << "] Input [" << node_arg.Name() << "] has no shape";
+      return false;
+    }
+
+    // We do not support dynamic shape input yet
+    for (const auto& dim : shape_proto->dim()) {
+      if (!dim.has_dim_value()) {
+        LOGS_DEFAULT(WARNING) << "Dynamic shape is not supported for now, for input:" << node_arg.Name();
+        return false;
+      }
+      if (dim.dim_value() == 0) {
+        LOGS_DEFAULT(WARNING) << "Zero in shape is not supported for now, for input:" << node_arg.Name();
+        return false;
+      }
+    }
+    return true;
+  };
+
+  auto has_initialized_quant_param = [](const NodeArg& arg, const InitializedTensorSet& initializers) {
+    auto it = initializers.find(arg.Name());
+    if (it == initializers.end()) {
+      LOGS_DEFAULT(WARNING) << "The quantization param must be an initializer tensor";
+      return false;
+    }
+    return true;
+  };
+
+  for (const auto& input : node_unit.Inputs()) {
+    if (!input.node_arg.Exists()) {
+      continue;
+    }
+    if (!has_supported_shape(input.node_arg, node_unit.Name(), node_unit.OpType()))
+      return false;
+
+    if (input.quant_param.has_value()) {
+      if (!has_supported_shape(input.quant_param->scale, node_unit.Name(), node_unit.OpType()))
+        return false;
+
+      if (!has_initialized_quant_param(input.quant_param->scale, initializers))
+        return false;
+      // zero point is optional
+      if (input.quant_param->zero_point) {
+        if (!has_supported_shape(*input.quant_param->zero_point, node_unit.Name(), node_unit.OpType()))
+          return false;
+        if (!has_initialized_quant_param(*input.quant_param->zero_point, initializers))
+          return false;
+      }
+    }
+  }
+  for (const auto& output : node_unit.Outputs()) {
+    if (output.quant_param.has_value()) {
+      if (!has_supported_shape(output.quant_param->scale, node_unit.Name(), node_unit.OpType()))
+        return false;
+
+      if (!has_initialized_quant_param(output.quant_param->scale, initializers))
+        return false;
+      // zero point is optional
+      if (output.quant_param->zero_point) {
+        if (!has_supported_shape(*output.quant_param->zero_point, node_unit.Name(), node_unit.OpType()))
+          return false;
+        if (!has_initialized_quant_param(*output.quant_param->zero_point, initializers))
+          return false;
+      }
+    }
+  }
+  return HasSupportedInputOutputsImpl(initializers, node_unit);
+}
+
+bool BaseOpBuilder::HasSupportedInputOutputsImpl(
+    const InitializedTensorSet& /* initializers */, const NodeUnit& node_unit) const {
+  // Check input data type, int64 is generally unsupported
+  // specific op builder can override this if the int64 input corresponds to VSINPU param
+  for (const auto& input : node_unit.Inputs()) {
+    auto input_type = input.node_arg.Type();
+    if (*input_type == "tensor(int64)" || !util::IsTypeSupported(&input.node_arg)) {
+      LOGS_DEFAULT(WARNING) << node_unit.OpType() << " has unsupported input type : "
+                            << *input_type;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool BaseOpBuilder::HasSupportedOpSet(const NodeUnit& node_unit) const {
+  auto since_version = node_unit.SinceVersion();
+  if (since_version < GetMinSupportedOpSet(node_unit) || since_version > GetMaxSupportedOpSet(node_unit)) {
+    LOGS_DEFAULT(VERBOSE) << node_unit.OpType() << " opset [" << since_version
+                          << "] is only supported for opset ["
+                          << GetMinSupportedOpSet(node_unit) << ", "
+                          << GetMaxSupportedOpSet(node_unit) << "]";
     return false;
   }
 
-  if (!util::CheckNoZeroDim(node)) {
-    LOGS_DEFAULT(VERBOSE) << "Dynamic shape(shape has zero dim) is not supported!";
-    return false;
-  }
-
-  return IsOpSupported(graph_viewer, node);
+  return true;
 }
 
 bool BaseOpBuilder::BuildOp(vsi::npu::GraphEP* graph_ep,
                             const onnxruntime::GraphViewer& graph_viewer,
-                            const Node* node) {
+                            const NodeUnit& node_unit) {
   std::vector<std::shared_ptr<tim::vx::Tensor>> inputs;
-  auto input_defs = node->InputDefs();
-  for (auto input_def : input_defs) {
+  std::vector<NodeUnitIODef> input_defs = node_unit.Inputs();
+  std::vector<NodeUnitIODef> output_defs = node_unit.Outputs();
+
+  for (const auto input_def : input_defs) {
     auto it = std::find_if(
         graph_ep->GetGraphInputs().begin(), graph_ep->GetGraphInputs().end(),
         [input_def](const std::shared_ptr<GraphIOInfo>& info) {
-          return info->name == input_def->Name();
+          return info->name == input_def.node_arg.Name();
         });
     tim::vx::TensorAttribute attr;
-    if (graph_viewer.IsConstantInitializer(input_def->Name(), true)) {
+    if (graph_viewer.IsConstantInitializer(input_def.node_arg.Name(), true)) {
       attr = tim::vx::TensorAttribute::CONSTANT;
     } else if (it == graph_ep->GetGraphInputs().end()) {
       attr = tim::vx::TensorAttribute::TRANSIENT;
@@ -87,28 +163,28 @@ bool BaseOpBuilder::BuildOp(vsi::npu::GraphEP* graph_ep,
       attr = tim::vx::TensorAttribute::INPUT;
     }
 
-    auto tensor = graph_ep->MapTIMVXTensor(graph_ep->GetGraph(), input_def,
+    auto tensor = graph_ep->MapTIMVXTensor(graph_ep->GetGraph(), input_def, node_unit,
                                            &graph_viewer, attr);
     inputs.push_back(tensor);
   }
 
   std::vector<std::shared_ptr<tim::vx::Tensor>> outputs;
-  auto output_defs = node->OutputDefs();
+
   for (auto output_def : output_defs) {
     auto it = std::find_if(
         graph_ep->GetGraphOutputs().begin(), graph_ep->GetGraphOutputs().end(),
         [output_def](const std::shared_ptr<GraphIOInfo>& info) {
-          return info->name == output_def->Name();
+          return info->name == output_def.node_arg.Name();
         });
     tim::vx::TensorAttribute attribute =
         it == graph_ep->GetGraphOutputs().end()
             ? tim::vx::TensorAttribute::TRANSIENT
             : tim::vx::TensorAttribute::OUTPUT;
-    auto tensor = graph_ep->MapTIMVXTensor(graph_ep->GetGraph(), output_def,
+    auto tensor = graph_ep->MapTIMVXTensor(graph_ep->GetGraph(), output_def, node_unit,
                                            &graph_viewer, attribute);
     outputs.push_back(tensor);
   }
-  return HandleBuildOp(graph_ep, inputs, outputs, node);
+  return HandleBuildOp(graph_ep, inputs, outputs, node_unit);
 }
 }  // namespace npu
 

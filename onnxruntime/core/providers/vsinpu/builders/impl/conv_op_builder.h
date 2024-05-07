@@ -41,13 +41,13 @@ class ConvOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     auto input_tensor = inputs[0];
     auto weight_tensor = inputs[1];
     auto OutChannel_idx = weight_tensor->GetShape().size() - 1;
     const bool is_1d_conv =
         weight_tensor->GetShape().size() == 3 ? true : false;
-    NodeAttrHelper helper(*node);
+    NodeAttrHelper helper(node_unit.GetNode());
     auto padtype = helper.Get("auto_pad", std::string(""));
     auto group = helper.Get("group", static_cast<uint32_t>(1));
 
@@ -131,9 +131,8 @@ class ConvOpBuilder : public BaseOpBuilder {
               multiplier, tim::vx::DataLayout::WCN, tim::vx::DataLayout::WIcOc);
         } else {
           op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Conv2d>(
-              /* W_begin,W_end, H_begin,H_end*/ std::array<uint32_t,
-                                                           4>{pads[1], pads[3],
-                                                              pads[0], pads[2]},
+              /* W_begin,W_end, H_begin,H_end*/ std::array<uint32_t, 4>{pads[1], pads[3],
+                                                                        pads[0], pads[2]},
               /* W_stride, H_stride*/
               std::array<uint32_t, 2>{stride[1], stride[0]},
               /* W_dilation, H_dilation*/
@@ -142,8 +141,8 @@ class ConvOpBuilder : public BaseOpBuilder {
         }
       }
     }
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

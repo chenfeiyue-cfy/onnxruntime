@@ -40,14 +40,14 @@ class ReduceMeanOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                   const Node* node) override {
+                   const NodeUnit& node_unit) override {
     LOGS_DEFAULT(INFO) << "Creating ReduceMean Op.";
 
-    NodeAttrHelper helper(*node);
+    NodeAttrHelper helper(node_unit.GetNode());
     std::vector<int64_t> def_axes;
     auto input_shape_size = inputs[0]->GetShape().size();
 
-    if (node->SinceVersion() < 18 && helper.HasAttr("axes")) {
+    if (node_unit.SinceVersion() < 18 && helper.HasAttr("axes")) {
         def_axes = helper.Get("axes", def_axes);
     } else if (inputs.size() > 1) {
         def_axes.resize(inputs[1]->GetSpec().GetElementNum());
@@ -68,11 +68,8 @@ class ReduceMeanOpBuilder : public BaseOpBuilder {
 
     bool keepdims = helper.Get("keepdims", 1) == 1;
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::ReduceMean>(axes, keepdims);
-    std::vector<NodeArg*> input_defs;
-    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[0]));
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
-
+    (*op).BindInput(inputs[0]).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
 }
 };

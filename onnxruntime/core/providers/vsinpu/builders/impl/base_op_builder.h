@@ -25,6 +25,7 @@
 
 #include "core/providers/vsinpu/builders/op_builder.h"
 #include "core/providers/vsinpu/vsinpu_ep_graph.h"
+#include "core/providers/vsinpu/vsinpu_util.h"
 #include "tim/vx/operation.h"
 #include "tim/vx/ops.h"
 
@@ -36,20 +37,37 @@ class BaseOpBuilder : public IOpBuilder {
   virtual ~BaseOpBuilder() = default;
 
   bool IsSupported(const onnxruntime::GraphViewer& graph_viewer,
-                   const Node* node) const override;
+                   const NodeUnit& node_unit) const override;
   bool BuildOp(vsi::npu::GraphEP* graph_ep,
-               const onnxruntime::GraphViewer& graph_viewer, const Node* node);
+               const onnxruntime::GraphViewer& graph_viewer, const NodeUnit& node_unit);
   virtual bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                              const Node* node) const {
     return true;
   }
+
+  virtual bool IsQuantizedOp(const NodeUnit& /* node_unit */) const { return false; }
+
+  virtual int GetMinSupportedOpSet(const NodeUnit& /* node_unit */) const { return 1; }
+  virtual int GetMaxSupportedOpSet(const NodeUnit& /* node_unit */) const { return 22; }
+
+  virtual bool HasSupportedInputOutputsImpl(
+      const InitializedTensorSet& initializers, const NodeUnit& node_unit) const;
+
+  // TODO:Check if this node_unit's type is supported
+  virtual bool IsNodeUnitTypeSupported(const NodeUnit& node_unit) const { return true; };
+
   virtual bool HandleBuildOp(
       vsi::npu::GraphEP* graph_ep,
       std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
       std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-      const Node* node) {
+      const NodeUnit& node_unit) {
     return true;
   }
+
+ private:
+  bool HasSupportedOpSet(const NodeUnit& node_unit) const;
+  bool HasSupportedInputOutputs(const InitializedTensorSet& initializers,
+                                const NodeUnit& node_unit) const;
 };
 }  // namespace npu
 }  // namespace vsi

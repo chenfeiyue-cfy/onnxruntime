@@ -29,16 +29,21 @@ namespace npu {
 class GemmOpBuilder : public BaseOpBuilder {
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
+    auto input_defs = node->InputDefs();
     NodeAttrHelper helper(*node);
-    auto trans_A = helper.Get("transA", 0);
-    auto trans_B = helper.Get("transB", 0);
-    if (trans_A == trans_B && trans_A == 1) {
-      LOGS_DEFAULT(WARNING) << "Cannot support Gemm Op with transA && transB both be true.";
-      return false;
-    }
-    for(auto input : node ->InputDefs()){
-      if(*input->Type() == "tensor(int64)") {
-        LOGS_DEFAULT(WARNING) << "Cannot support int64 Gemm operation.";
+    auto weight_units = helper.Get("transB", 0) == 1 ? vsi::npu::util::GetTensorShape(*input_defs[1]).GetDims()[0] : vsi::npu::util::GetTensorShape(*input_defs[1]).GetDims()[1];
+    if (input_defs.size() > 2) {
+      auto bias_shape = vsi::npu::util::GetTensorShape(*input_defs[2]);
+      if (bias_shape.NumDimensions() == 1 && bias_shape.GetDims()[0] != weight_units) {
+        LOGS_DEFAULT(WARNING) << "Not support to broadcast bias shape.";
+        return false;
+      } else if (bias_shape.NumDimensions() == 2 && (bias_shape.Size() != weight_units || (bias_shape.GetDims()[0] != 1 && bias_shape.GetDims()[1] != 1))) {
+        LOGS_DEFAULT(WARNING) << "Not support 2-dims bias shape.";
+        return false;
+      }
+
+      if (*input_defs[2]->Type() == "tensor(float16)" && !graph_viewer.IsConstantInitializer(input_defs[2]->Name(), true)) {
+        LOGS_DEFAULT(WARNING) << "Not support f16 bias with input attr.";
         return false;
       }
     }
@@ -47,94 +52,84 @@ class GemmOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Gemm Op.";
     auto input_A = inputs[0];
     auto input_B = inputs[1];
-    NodeAttrHelper helper(*node);
-    float default_float = 1.0f;
-    auto alpha = helper.Get("alpha", default_float);
-    auto beta = helper.Get("beta", default_float);
+    NodeAttrHelper helper(node_unit.GetNode());
+
     auto trans_A = helper.Get("transA", 0);
     auto trans_B = helper.Get("transB", 0);
-    bool has_alpha = (alpha != 1.0);
-    bool has_beta = (beta != 1.0);
-    bool has_C = (inputs.size() == 3);
+    const bool has_alpha = (helper.Get("alpha", 1.0f) != 1.0);
+    const bool has_beta = (helper.Get("beta", 1.0f) != 1.0);
+    const bool has_C = (inputs.size() == 3);
+    auto weight_units = helper.Get("transB", 0) == 1 ? inputs[1]->GetShape()[1] : inputs[1]->GetShape()[0];
 
-    tim::vx::TensorSpec CoefSpec(tim::vx::DataType::FLOAT32, {1},
-                                 tim::vx::TensorAttribute::CONSTANT);
-    auto alpha_tensor = graph_ep->GetGraph()->CreateTensor(CoefSpec);
-    alpha_tensor->CopyDataToTensor(&alpha);
-
-    auto beta_tensor = graph_ep->GetGraph()->CreateTensor(CoefSpec);
-    beta_tensor->CopyDataToTensor(&beta);
-
-    auto matmul_impl = [&](std::shared_ptr<tim::vx::Tensor> input_A,
-                           std::shared_ptr<tim::vx::Tensor> input_B,
-                           std::shared_ptr<tim::vx::Tensor> output) {
-      auto matmul_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Matmul>(
-          trans_A, trans_B);
-      (*matmul_op).BindInput(input_A).BindInput(input_B).BindOutput(output);
-      auto node_info = graph_ep->ConstructNodeIO(std::move(matmul_op), std::vector<onnxruntime::NodeArg*>(), std::vector<onnxruntime::NodeArg*>());
-      graph_ep->GetOps().push_back(node_info);
-    };
+    tim::vx::TensorSpec coef_spec(tim::vx::DataType::FLOAT32, {1},
+                                  tim::vx::TensorAttribute::CONSTANT);
 
     auto multiply_impl = [&](std::shared_ptr<tim::vx::Tensor> input,
                              std::shared_ptr<tim::vx::Tensor> coef,
                              std::shared_ptr<tim::vx::Tensor> output) {
       auto multiply_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Multiply>();
       (*multiply_op).BindInput(input).BindInput(coef).BindOutput(output);
-      auto node_info = graph_ep->ConstructNodeIO(std::move(multiply_op), std::vector<onnxruntime::NodeArg*>(), std::vector<onnxruntime::NodeArg*>());
-      graph_ep->GetOps().push_back(node_info);
+      graph_ep->GetOps().push_back(multiply_op);
     };
 
-    auto add_impl = [&](std::shared_ptr<tim::vx::Tensor> input_A,
-                        std::shared_ptr<tim::vx::Tensor> input_B,
-                        std::shared_ptr<tim::vx::Tensor> output) {
-      auto add_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Add>();
-      (*add_op).BindInput(input_A).BindInput(input_B).BindOutput(output);
-      auto node_info = graph_ep->ConstructNodeIO(std::move(add_op), std::vector<onnxruntime::NodeArg*>(), std::vector<onnxruntime::NodeArg*>());
-      graph_ep->GetOps().push_back(node_info);
+    auto transpose_impl = [&](std::shared_ptr<tim::vx::Tensor> input,
+                              std::shared_ptr<tim::vx::Tensor> output) {
+      std::vector<uint32_t> perm = {1U, 0U};
+      auto transpose_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Transpose>(perm);
+      (*transpose_op).BindInput(input).BindOutput(output);
+      graph_ep->GetOps().push_back(std::move(transpose_op));
     };
 
-    auto AB_output = outputs[0];
+    auto fc_impl = [&](std::vector<std::shared_ptr<tim::vx::Tensor>> inputs,
+                       std::shared_ptr<tim::vx::Tensor> output) {
+      auto fc_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::FullyConnected>(0, weight_units);
+      (*fc_op).BindInputs(inputs).BindOutput(output);
+      graph_ep->GetOps().push_back(std::move(fc_op));
+    };
+
+    auto alpha_A = input_A;
+    std::shared_ptr<tim::vx::Tensor> beta_C;
+    auto final_A = input_A;
+    auto final_B = input_B;
+
     if (has_alpha) {
-      AB_output = graph_ep->GetGraph()->CreateTensor(
-          outputs[0]->GetSpec().AsTransientSpec());
-      matmul_impl(input_A, input_B, AB_output);
-
-      if (has_C) {
-        auto mul1_output = graph_ep->GetGraph()->CreateTensor(
-            outputs[0]->GetSpec().AsTransientSpec());
-        multiply_impl(AB_output, alpha_tensor, mul1_output);
-        if (has_beta) {
-          auto multiplied_C = graph_ep->GetGraph()->CreateTensor(
-              inputs[2]->GetSpec().AsTransientSpec());
-          multiply_impl(inputs[2], beta_tensor, multiplied_C);
-          add_impl(mul1_output, multiplied_C, outputs[0]);
-        } else {
-          add_impl(mul1_output, inputs[2], outputs[0]);
-        }
-      } else {
-        multiply_impl(AB_output, alpha_tensor, outputs[0]);
-      }
-    } else {
-      if (has_C) {
-        AB_output = graph_ep->GetGraph()->CreateTensor(
-            outputs[0]->GetSpec().AsTransientSpec());
-        matmul_impl(input_A, input_B, AB_output);
-        if (has_beta) {
-          auto multiplied_C = graph_ep->GetGraph()->CreateTensor(
-              inputs[2]->GetSpec().AsTransientSpec());
-          multiply_impl(inputs[2], beta_tensor, multiplied_C);
-          add_impl(AB_output, multiplied_C, outputs[0]);
-        } else {
-          add_impl(AB_output, inputs[2], outputs[0]);
-        }
-      } else {
-        matmul_impl(input_A, input_B, outputs[0]);
-      }
+      auto alpha_tensor = graph_ep->GetGraph()->CreateTensor(coef_spec);
+      auto alpha = helper.Get("alpha", 1.0f);
+      alpha_tensor->CopyDataToTensor(&alpha);
+      alpha_A = graph_ep->GetGraph()->CreateTensor(
+          input_A->GetSpec().AsTransientSpec());
+      multiply_impl(input_A, alpha_tensor, alpha_A);
+      final_A = alpha_A;
     }
+    if (has_beta) {
+      auto beta_tensor = graph_ep->GetGraph()->CreateTensor(coef_spec);
+      auto beta = helper.Get("beta", 1.0f);
+      beta_tensor->CopyDataToTensor(&beta);
+      beta_C = graph_ep->GetGraph()->CreateTensor(
+          inputs[2]->GetSpec().AsTransientSpec());
+      multiply_impl(inputs[2], beta_tensor, beta_C);
+    } else if (has_C) {
+      beta_C = inputs[2];
+    }
+
+    if (trans_A) {
+      final_A = graph_ep->GetGraph()->CreateTensor(
+          input_A->GetSpec().AsTransientSpec());
+      transpose_impl(alpha_A, final_A);
+    }
+    if (!trans_B) {
+      final_B = graph_ep->GetGraph()->CreateTensor(
+          input_B->GetSpec().AsTransientSpec());
+      transpose_impl(input_B, final_B);
+    }
+    std::vector<std::shared_ptr<tim::vx::Tensor>> fc_inputs = {final_A, final_B};
+
+    if (has_C) fc_inputs.push_back(beta_C);
+    fc_impl(fc_inputs, outputs[0]);
 
     return true;
   }

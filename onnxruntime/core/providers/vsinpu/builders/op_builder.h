@@ -23,6 +23,7 @@
  *****************************************************************************/
 #pragma once
 #include "core/graph/graph_viewer.h"
+#include "core/providers/shared/node_unit/node_unit.h"
 
 namespace onnxruntime {
 namespace vsi {
@@ -34,12 +35,12 @@ class IOpBuilder {
   IOpBuilder() {}
   virtual ~IOpBuilder() {}
   virtual bool IsSupported(const onnxruntime::GraphViewer& graph_viewer,
-                           const Node* node) const {
+                           const NodeUnit& node_unit) const {
     return true;
   }
   virtual bool BuildOp(GraphEP* graph_ep,
                        const onnxruntime::GraphViewer& graph_viewer,
-                       const Node* node) = 0;
+                       const NodeUnit& node_unit) = 0;
 };
 }  // namespace npu
 

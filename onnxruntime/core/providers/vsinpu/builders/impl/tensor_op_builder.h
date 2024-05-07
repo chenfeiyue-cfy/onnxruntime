@@ -28,13 +28,27 @@ namespace onnxruntime {
 namespace vsi {
 namespace npu {
 class ReshapeOpBuilder : public BaseOpBuilder {
+  int GetMinSupportedOpSet(const NodeUnit& /* node_unit */) const override { return 5; }
+
+  bool HasSupportedInputOutputsImpl(const InitializedTensorSet& initializers,
+                                    const NodeUnit& node_unit) const override {
+    auto input = node_unit.Inputs()[0];
+    auto shape = node_unit.Inputs()[1];
+    if (initializers.end() == initializers.find(shape.node_arg.Name())) {
+      LOGS_DEFAULT(VERBOSE) << "Target shape of reshape op must be known.";
+      return false;
+    }
+    if (util::IsTypeSupported(&input.node_arg) && util::IsTypeSupported(&shape.node_arg)) {
+      if (*input.node_arg.Type() != "tensor(int64)") {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
     auto input_defs = node->InputDefs();
-    if (!graph_viewer.IsConstantInitializer(input_defs[1]->Name(), true)) {
-      LOGS_DEFAULT(VERBOSE) << "New shape of reshape must be known";
-      return false;
-    }
 
     NodeAttrHelper helper(*node);
     const bool allow_zero = helper.Get("allowzero", 0) == 1;
@@ -57,7 +71,7 @@ class ReshapeOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Reshape Op.";
     std::vector<int64_t> new_shape(inputs[1]->GetShape()[0]);
     inputs[1]->CopyDataFromTensor(new_shape.data());
@@ -79,10 +93,8 @@ class ReshapeOpBuilder : public BaseOpBuilder {
     std::vector<uint32_t> new_shape_uint32(new_shape.begin(), new_shape.end());
     std::reverse(new_shape_uint32.begin(), new_shape_uint32.end());
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(new_shape_uint32);
-    std::vector<NodeArg*> input_defs;
-    input_defs.push_back(util::RemoveWrapper(node->InputDefs()[0]));
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInput(inputs[0]).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
@@ -98,29 +110,25 @@ class TransposeOpBuilder : public BaseOpBuilder {
       LOGS_DEFAULT(VERBOSE) << "Size mismatch between perm vector and input shape.";
       return false;
     }
-    if (*input_defs[0]->Type() == "tensor(int64)") {
-      LOGS_DEFAULT(VERBOSE) << "Int64 input cannot support except as parameter.";
-      return false;
-    }
     return true;
   }
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Transpose Op.";
     std::vector<int64_t> def_val(inputs[0]->GetShape().size());
     for (int64_t i = 0; i < def_val.size(); i++) def_val[i] = def_val.size() - i - 1;
 
-    NodeAttrHelper helper(*node);
+    NodeAttrHelper helper(node_unit.GetNode());
     def_val = helper.Get("perm", def_val);
     std::vector<uint32_t> timvx_perm;
     for (uint32_t i = 0; i < def_val.size(); i++) {
       timvx_perm.push_back(def_val.size() - 1 - def_val[def_val.size() - i - 1]);
     }
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Transpose>(timvx_perm);
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

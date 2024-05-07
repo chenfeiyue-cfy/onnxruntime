@@ -32,11 +32,11 @@ class ReluOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Relu Activation.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Relu>();
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
@@ -45,11 +45,11 @@ class SigmoidOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Sigmoid Activation.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Sigmoid>();
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
@@ -58,11 +58,11 @@ class TanhOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Tanh activation.";
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Tanh>();
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
@@ -72,14 +72,15 @@ class LeakyReluOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating LeakyRelu activation.";
-    NodeAttrHelper helper(*node);
+    const auto& node = node_unit.GetNode();
+    NodeAttrHelper helper(node);
     auto alpha = helper.Get("alpha", 1.0f);
     auto op =
         graph_ep->GetGraph()->CreateOperation<tim::vx::ops::LeakyRelu>(alpha);
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
@@ -89,14 +90,15 @@ class EluOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Elu activation.";
-    NodeAttrHelper helper(*node);
+    const auto& node = node_unit.GetNode();
+    NodeAttrHelper helper(node);
     auto alpha = helper.Get("alpha", 1.0f);
     auto op =
         graph_ep->GetGraph()->CreateOperation<tim::vx::ops::LeakyRelu>(alpha);
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
@@ -106,15 +108,16 @@ class HardSigmoidOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating HardSigmoid activation.";
-    NodeAttrHelper helper(*node);
+    const auto& node = node_unit.GetNode();
+    NodeAttrHelper helper(node);
     auto alpha = helper.Get("alpha", 1.0f);
     auto beta = helper.Get("beta", 1.0f);
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::HardSigmoid>(
         alpha, beta);
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

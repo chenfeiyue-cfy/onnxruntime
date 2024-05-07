@@ -28,17 +28,46 @@
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
+
 class QuantizeLinearOpBuilder : public BaseOpBuilder {
+  enum QuantizeINPUTS {
+    input_tensor = 0,
+    scale_tensor = 1,
+    zero_point_tensor = 2
+  };
+
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
-                     const Node* node) const override;
+                     const Node* node) const override {
+    auto input_defs = node->InputDefs();
+    auto scale_shape = npu::util::GetTensorShape(*input_defs[QuantizeINPUTS::scale_tensor]);
+    NodeAttrHelper helper(*node);
+    if (helper.HasAttr("block_size") && helper.Get("block_size", 0) != 0) {
+      LOGS_DEFAULT(WARNING) << "Not support block quantization.";
+      return false;
+    }
+    if (!graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::scale_tensor]->Name(), true) ||
+        (input_defs.size() == 3 && !graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::zero_point_tensor]->Name(), true))) {
+      LOGS_DEFAULT(WARNING) << "Only support const scale / zero point.";
+      return false;
+    }
+
+    if (scale_shape.Size() != 1) {
+      LOGS_DEFAULT(ERROR) << "Per channel quantized output is not supported in QuantizeLinearOp.";
+      return false;
+    }
+    return true;
+  }
+
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override;
-
- private:
-  template <typename T1, typename T2>
-  struct QuantizeImpl;
+                     const NodeUnit& node_unit) override {
+    LOGS_DEFAULT(INFO) << "Creating Quantize Op.";
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
+    return true;
+  }
 };
 }  // namespace npu
 

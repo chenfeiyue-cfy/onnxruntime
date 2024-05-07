@@ -45,44 +45,46 @@ class SoftmaxOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Softmax Op.";
-    NodeAttrHelper helper(*node);
-    int32_t def_val = node->SinceVersion() < 13 ? 1 : -1;
+    NodeAttrHelper helper(node_unit.GetNode());
+    int32_t def_val = node_unit.SinceVersion() < 13 ? 1 : -1;
     auto axis = helper.Get("axis", def_val);
 
-    if (node->SinceVersion() < 13) {
+    if (def_val == 1) {
       // In earlier opset version of softmax, input is coerced into 2D shape
       // Attribute "axis" is to describe the axis of the inputs when coerced to 2D but not take part in softmax computation
+      const bool is_2d_shape = inputs[0]->GetShape().size() == 2 ? true : false;
+      if (!is_2d_shape) {
+        axis = HandleNegativeAxis(axis, inputs[0]->GetShape().size());
+        auto it = inputs[0]->GetShape().end();
+        uint32_t last_dim = std::accumulate(it - axis, it, 1, std::multiplies<uint32_t>());
+        uint32_t first_dim = std::accumulate(inputs[0]->GetShape().begin(), it - axis, 1, std::multiplies<uint32_t>());
+        auto reshaped_spec = inputs[0]->GetSpec().AsTransientSpec().SetShape(std::vector<uint32_t>{first_dim, last_dim});
+        auto reshaped_input = graph_ep->GetGraph()->CreateTensor(reshaped_spec);
+        auto reshaped_output = graph_ep->GetGraph()->CreateTensor(inputs[0]->GetSpec().AsTransientSpec());
 
-      axis = HandleNegativeAxis(axis, inputs[0]->GetShape().size());
-      auto it = inputs[0]->GetShape().end();
-      uint32_t last_dim = std::accumulate(it - axis, it, 1, std::multiplies<uint32_t>());
-      uint32_t first_dim = std::accumulate(inputs[0]->GetShape().begin(), it - axis, 1, std::multiplies<uint32_t>());
-      auto reshaped_spec = inputs[0]->GetSpec().AsTransientSpec().SetShape(std::vector<uint32_t>{first_dim, last_dim});
-      auto reshaped_input = graph_ep->GetGraph()->CreateTensor(reshaped_spec);
-      auto reshaped_output = graph_ep->GetGraph()->CreateTensor(inputs[0]->GetSpec().AsTransientSpec());
+        auto reshape_input_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(std::vector<uint32_t>{first_dim, last_dim});
+        auto softmax_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, 0);
+        auto reshaped_output_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(inputs[0]->GetShape());
 
-      auto reshape_input_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(std::vector<uint32_t>{first_dim, last_dim});
-      auto softmax_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, 0);
-      auto reshaped_output_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(inputs[0]->GetShape());
+        (*reshape_input_op).BindInputs(inputs).BindOutput(reshaped_input);
+        (*softmax_op).BindInput(reshaped_input).BindOutput(reshaped_output);
+        (*reshaped_output_op).BindInput(reshaped_output).BindOutputs(outputs);
 
-      (*reshape_input_op).BindOutput(reshaped_input);
-      auto reshape_in_info = graph_ep->ConstructNodeIO(std::move(reshape_input_op), util::RemoveWrapper(node->InputDefs()), std::vector<NodeArg*>());
-      (*softmax_op).BindInput(reshaped_input).BindOutput(reshaped_output);
-      auto softmax_info = graph_ep->ConstructNodeIO(std::move(softmax_op), std::vector<NodeArg*>(), std::vector<NodeArg*>());
-      (*reshaped_output_op).BindInput(reshaped_output);
-      auto reshape_out_info = graph_ep->ConstructNodeIO(std::move(reshaped_output_op), std::vector<NodeArg*>(), util::RemoveWrapper(node->OutputDefs()));
-
-      graph_ep->GetOps().push_back(reshape_in_info);
-      graph_ep->GetOps().push_back(softmax_info);
-      graph_ep->GetOps().push_back(reshape_out_info);
-
+        graph_ep->GetOps().push_back(std::move(reshape_input_op));
+        graph_ep->GetOps().push_back(std::move(softmax_op));
+        graph_ep->GetOps().push_back(std::move(reshaped_output_op));
+      } else {
+        auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, 0);
+        (*op).BindInputs(inputs).BindOutputs(outputs);
+        graph_ep->GetOps().push_back(std::move(op));
+      }
     } else {
       axis = util::ReverseAxis(axis, inputs[0]->GetShape().size());
       auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Softmax>(1, static_cast<uint32_t>(axis));
-      auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-      graph_ep->GetOps().push_back(node_info);
+      (*op).BindInputs(inputs).BindOutputs(outputs);
+      graph_ep->GetOps().push_back(std::move(op));
     }
     return true;
   }

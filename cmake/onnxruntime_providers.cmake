@@ -1796,6 +1796,8 @@ if (onnxruntime_USE_VSINPU)
     "${ONNXRUNTIME_ROOT}/core/providers/vsinpu/*.cc"
     "${ONNXRUNTIME_ROOT}/core/providers/shared/utils/utils.h"
     "${ONNXRUNTIME_ROOT}/core/providers/shared/utils/utils.cc"
+    "${ONNXRUNTIME_ROOT}/core/providers/shared/node_unit/node_unit.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/shared/node_unit/node_unit.cc"
   )
   source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_vsinpu_srcs})
   add_library(onnxruntime_providers_vsinpu ${onnxruntime_providers_vsinpu_srcs})

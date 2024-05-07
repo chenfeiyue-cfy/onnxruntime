@@ -45,14 +45,14 @@ class ConcatOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(VERBOSE) << "Creating Concat Op.";
-    NodeAttrHelper helper(*node);
+    NodeAttrHelper helper(node_unit.GetNode());
     auto axis = helper.Get("axis", 0);
     axis = util::ReverseAxis(axis, inputs[0]->GetShape().size());
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Concat>(static_cast<uint32_t>(axis), inputs.size());
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

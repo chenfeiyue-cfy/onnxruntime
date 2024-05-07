@@ -24,6 +24,8 @@
 
 #include "vsinpu_util.h"
 
+#include "core/optimizer/initializer.h"
+#include "core/providers/shared/utils/utils.h"
 namespace onnxruntime {
 
 template <typename T>
@@ -78,7 +80,7 @@ tim::vx::DataType OnnxDtypeToTIMVXDtype(const ONNX_NAMESPACE::DataType type) {
   return tim::vx::DataType::FLOAT32;
 }
 
-tim::vx::ShapeType OnnxShapeToTIMVXShape(const onnxruntime::TensorShape ts) {
+tim::vx::ShapeType OnnxShapeToTIMVXShape(const onnxruntime::TensorShape& ts) {
   tim::vx::ShapeType timvx_shape(ts.NumDimensions());
   if (ts.NumDimensions() == 0) {
     timvx_shape.push_back(1);
@@ -232,64 +234,6 @@ tim::vx::PadType GetPadType(const std::string type) {
   return tim::vx::PadType::NONE;
 }
 
-bool ExcludeType(const NodeArg* node_arg, std::string& reason) {
-  const auto* type_proto = node_arg->TypeAsProto();
-  if (!type_proto) {
-    return false;
-  }
-
-  switch (type_proto->tensor_type().elem_type()) {
-    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT64:
-      reason += "## only support int64 tensor as attribute.";
-      return false;
-    default:
-      return true;
-  }
-}
-
-bool CheckMainInputType(const Node* node, std::string& reason) {
-  auto input_defs = node->InputDefs();
-  return ExcludeType(input_defs[0], reason);
-}
-
-bool CheckZeroDim(const NodeArg* node_arg) {
-  auto shape = node_arg->Shape();
-  if (shape == nullptr) {
-    return false;
-  }
-  for (int i = 0; i < shape->dim_size(); i++) {
-    if (shape->dim(i).dim_value() == 0) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool CheckAllExcludeType(const Node* node, std::string& reason) {
-  bool are_types_supported = true;
-  node->ForEachDef(
-      [&are_types_supported, &reason](const onnxruntime::NodeArg& node_arg,
-                                      bool /*is_input*/) {
-        are_types_supported &= ExcludeType(&node_arg, reason);
-      });
-  return are_types_supported;
-}
-
-bool CheckNoZeroDim(const Node* node) {
-  bool no_zero_dim = true;
-
-  node->ForEachDef(
-      [&no_zero_dim](const onnxruntime::NodeArg& node_arg, bool /*is_input*/) {
-        no_zero_dim &= vsi::npu::util::CheckZeroDim(&node_arg);
-      });
-
-  if (!no_zero_dim) {
-    LOGS_DEFAULT(ERROR) << "Tensor with dimension 0 is not supported.";
-    return false;
-  }
-  return true;
-}
-
 int32_t ReverseAxis(int32_t origin_axis, int32_t length) {
   int32_t axis = 0;
   if (origin_axis < 0) {
@@ -311,18 +255,247 @@ std::vector<int32_t> ReverseAxis(std::vector<int32_t> origin_axes, int32_t lengt
   return axes;
 }
 
-std::vector<NodeArg*> RemoveWrapper(ConstPointerContainer<std::vector<NodeArg*>> constPtrContainer) {
-  std::vector<onnxruntime::NodeArg*> nodeArgsVector;
-  for (const auto& nodeArgPtr : constPtrContainer) {
-    nodeArgsVector.push_back(const_cast<onnxruntime::NodeArg*>(nodeArgPtr));
+bool IsTypeSupported(const NodeArg* node_arg) {
+  const auto* type_proto = node_arg->TypeAsProto();
+  if (!type_proto) {
+    return false;
   }
-  return nodeArgsVector;
+
+  switch (type_proto->tensor_type().elem_type()) {
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_BOOL:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_FLOAT:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_FLOAT16:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT8:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT8:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT16:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT32:
+    case ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT64:
+      return true;
+    default:
+      return false;
+  }
 }
 
-NodeArg* RemoveWrapper(const NodeArg* onnxNodeArg){
-  return const_cast<NodeArg*> (onnxNodeArg);
+QuantizedOpType GetQuantizedOpType(const NodeUnit& node_unit) {
+  const auto& op_type = node_unit.OpType();
+  if (node_unit.UnitType() == NodeUnit::Type::SingleNode) {
+    if (op_type == "DequantizeLinear")
+      return QuantizedOpType::DequantizeLinear;
+    else if (op_type == "QuantizeLinear")
+      return QuantizedOpType::QuantizeLinear;
+    else if (op_type == "QLinearConv")
+      return QuantizedOpType::QLinearConv;
+    else if (op_type == "QLinearMatMul")
+      return QuantizedOpType::QLinearMatMul;
+    else if (op_type == "QLinearAdd")
+      return QuantizedOpType::QLinearAdd;
+    else if (op_type == "QLinearMul")
+      return QuantizedOpType::QLinearMul;
+    else if (op_type == "QLinearSigmoid")
+      return QuantizedOpType::QLinearSigmoid;
+    else if (op_type == "QLinearAveragePool")
+      return QuantizedOpType::QLinearAveragePool;
+  } else if (node_unit.UnitType() == NodeUnit::Type::QDQGroup) {
+    if (op_type == "Conv")
+      return QuantizedOpType::QDQConv;
+    else if (op_type == "Resize")
+      return QuantizedOpType::QDQResize;
+    else if (op_type == "AveragePool")
+      return QuantizedOpType::QDQAveragePool;
+    else if (op_type == "Add")
+      return QuantizedOpType::QDQAdd;
+    else if (op_type == "Mul")
+      return QuantizedOpType::QDQMul;
+    else if (op_type == "Transpose")
+      return QuantizedOpType::QDQTranspose;
+    else if (op_type == "Reshape")
+      return QuantizedOpType::QDQReshape;
+    else if (op_type == "Softmax")
+      return QuantizedOpType::QDQSoftmax;
+    else if (op_type == "Concat")
+      return QuantizedOpType::QDQConcat;
+    else if (op_type == "Gemm")
+      return QuantizedOpType::QDQGemm;
+    else if (op_type == "MatMul")
+      return QuantizedOpType::QDQMatMul;
+  }
+  return QuantizedOpType::Unknown;
 }
 
+ConvType GetConvType(const NodeUnit& node_unit, const InitializedTensorSet& initializers) {
+  NodeAttrHelper helper(node_unit);
+  const auto group = helper.Get("group", 1);
+
+  const auto& weight = node_unit.Inputs()[1].node_arg.Name();
+  const auto& weight_tensor = *initializers.at(weight);
+
+  // For ONNX we only have 1 conv ops
+  // For VSINPU we have 3
+  // Input is (W, H, C, N)
+  // group == 1,                                   --> regular conv
+  // group != 1 && weight is (kW, kH, group, M),       --> depthwise conv
+  // group != 1 && weight is (kW, kH, C/group, M), --> grouped conv
+  if (group == 1)
+    return ConvType::Regular;
+  else if ((weight_tensor.dims()[1] == group))
+    return ConvType::Depthwise;
+  else
+    return ConvType::Grouped;
+}
+
+bool IsQuantizedConv(QuantizedOpType quant_op_type) {
+  return (quant_op_type == QuantizedOpType::QLinearConv) ||
+         (quant_op_type == QuantizedOpType::QDQConv);
+}
+
+bool IsQuantizedPool(QuantizedOpType quant_op_type) {
+  return (quant_op_type == QuantizedOpType::QLinearAveragePool) ||
+         (quant_op_type == QuantizedOpType::QDQAveragePool);
+}
+
+bool IsQuantizedGemm(QuantizedOpType quant_op_type) {
+  return (quant_op_type == QuantizedOpType::QLinearMatMul) ||
+         (quant_op_type == QuantizedOpType::QDQGemm) ||
+         (quant_op_type == QuantizedOpType::QDQMatMul);
+}
+
+bool IsQuantizedBinaryOp(QuantizedOpType quant_op_type) {
+  return quant_op_type == QuantizedOpType::QLinearMatMul ||
+         quant_op_type == QuantizedOpType::QLinearAdd ||
+         quant_op_type == QuantizedOpType::QLinearMul ||
+         quant_op_type == QuantizedOpType::QDQAdd ||
+         quant_op_type == QuantizedOpType::QDQMul ||
+         quant_op_type == QuantizedOpType::QDQGemm ||
+         quant_op_type == QuantizedOpType::QDQMatMul ||
+         IsQuantizedConv(quant_op_type);
+}
+
+bool HasValidBinaryOpQuantizedInputTypes(const NodeUnit& node_unit) {
+  auto quant_op_type = GetQuantizedOpType(node_unit);
+  int32_t a_input_type, b_input_type;
+  if (!IsQuantizedBinaryOp(quant_op_type)) {
+    LOGS_DEFAULT(VERBOSE) << "[" << node_unit.OpType() << "] is not a binary qlinear op";
+    return false;
+  }
+
+  const auto& inputs = node_unit.Inputs();
+  if (!GetType(inputs[0].node_arg, a_input_type))
+    return false;
+  if (!GetType(inputs[1].node_arg, b_input_type))
+    return false;
+
+  // QlinearConv/MatMul/QDQGemm/QDQMatMul supports u8u8 or u8s8
+  // QLinearAdd/QLinearMul only support u8u8
+  bool is_quant_conv_or_gemm = IsQuantizedConv(quant_op_type) || IsQuantizedGemm(quant_op_type);
+
+  bool has_valid_qlinear_conv_weight =
+      (b_input_type == ONNX_NAMESPACE::TensorProto_DataType_UINT8 ||
+       b_input_type == ONNX_NAMESPACE::TensorProto_DataType_INT8);
+
+  bool has_valid_qlinear_conv_input =
+      (a_input_type == ONNX_NAMESPACE::TensorProto_DataType_UINT8 ||
+       a_input_type == ONNX_NAMESPACE::TensorProto_DataType_INT8);
+
+  if ((is_quant_conv_or_gemm && !has_valid_qlinear_conv_weight) ||
+      (!is_quant_conv_or_gemm && a_input_type != b_input_type)) {
+    LOGS_DEFAULT(VERBOSE) << "[" << node_unit.OpType()
+                          << "] A Input type: [" << a_input_type
+                          << "] B Input type: [" << b_input_type
+                          << "] is not supported for now";
+    return false;
+  }
+
+  return true;
+}
+
+void GetQuantizationScaleAndZeroPoint(
+    const InitializedTensorSet& initializers, const NodeUnitIODef& io_def, const Path& model_path,
+    float& scale, int32_t& zero_point, std::optional<std::vector<float>>& pcq_scales,
+    std::optional<std::vector<int32_t>>& pcq_zps) {
+  scale = 0.0f;
+  zero_point = 0;
+
+  const auto& quant_param = *io_def.quant_param;
+  {  // get the scale
+    const auto& name = quant_param.scale.Name();
+    Initializer unpacked_tensor(*initializers.at(name), model_path);
+    scale = unpacked_tensor.DataAsSpan<float>()[0];
+
+    // per channel quantized handling
+    if (!unpacked_tensor.dims().empty() && unpacked_tensor.dims()[0] != 0 && unpacked_tensor.dims()[0] != 1) {
+      auto scales = unpacked_tensor.DataAsSpan<float>();
+      std::vector<float> scales_vec(scales.begin(), scales.end());
+      pcq_scales = onnxruntime::make_optional(std::move(scales_vec));
+    }
+  }
+
+  if (quant_param.zero_point) {  // get the zero point if it exists
+    const auto& name = quant_param.zero_point->Name();
+    Initializer unpacked_tensor(*initializers.at(name), model_path);
+    bool is_i8_zp = unpacked_tensor.data_type() == onnx::TensorProto_DataType_INT8;
+    // some qdq conv bias is int32 quantized
+    bool is_int32_zp = unpacked_tensor.data_type() == onnx::TensorProto_DataType_INT32;
+    zero_point = is_i8_zp ? static_cast<int32_t>(unpacked_tensor.DataAsSpan<int8_t>()[0]) : is_int32_zp ? static_cast<int32_t>(unpacked_tensor.DataAsSpan<int32_t>()[0])
+                                                                                                        : static_cast<int32_t>(unpacked_tensor.DataAsByteSpan()[0]);
+
+    // per channel quantized handling
+    if (!unpacked_tensor.dims().empty() && unpacked_tensor.dims()[0] != 0 && unpacked_tensor.dims()[0] != 1) {
+      auto type = unpacked_tensor.data_type();
+      if (is_i8_zp) {
+        auto zps = unpacked_tensor.DataAsSpan<int8_t>();
+        std::vector<int32_t> zps_vec(zps.begin(), zps.end());
+        pcq_zps = onnxruntime::make_optional(std::move(zps_vec));
+      }
+      else if (is_int32_zp) {
+        auto zps = unpacked_tensor.DataAsByteSpan();
+        std::vector<int32_t> zps_vec(zps.begin(), zps.end());
+        pcq_zps = onnxruntime::make_optional(std::move(zps_vec));
+      }
+      else {
+        auto zps = unpacked_tensor.DataAsSpan<int32_t>();
+        std::vector<int32_t> zps_vec(zps.begin(), zps.end());
+        pcq_zps = onnxruntime::make_optional(std::move(zps_vec));
+      }
+    }
+  }
+}
+
+static bool IsInternalQuantizedNodeUnit(const NodeUnit& node_unit) {
+  // First, ignore QDQ NodeUnit which is not internal quantized node
+  if (node_unit.UnitType() == NodeUnit::Type::QDQGroup)
+    return false;
+
+  // These operators can use uint8 input without specific QLinear version of it
+  // However, the mode has to be internal to the graph/partition (they cannot consume graph inputs)
+  static const std::unordered_set<std::string> internal_quantized_op_types =
+      {
+          "Transpose",
+          "Resize",
+          "Concat",
+          "MaxPool",
+      };
+
+  const auto& node = node_unit.GetNode();
+  if (!Contains(internal_quantized_op_types, node.OpType()))
+    return false;
+
+  int32_t input_type;
+  ORT_ENFORCE(GetType(*node.InputDefs()[0], input_type));
+
+  return input_type == ONNX_NAMESPACE::TensorProto_DataType_UINT8 || input_type == ONNX_NAMESPACE::TensorProto_DataType_INT8;
+}
+
+bool GetType(const NodeArg& node_arg, int32_t& type) {
+  type = ONNX_NAMESPACE::TensorProto_DataType_UNDEFINED;
+  const auto* type_proto = node_arg.TypeAsProto();
+  if (!type_proto || !type_proto->has_tensor_type() || !type_proto->tensor_type().has_elem_type()) {
+    LOGS_DEFAULT(WARNING) << "NodeArg [" << node_arg.Name() << "] has no input type";
+    return false;
+  }
+
+  type = type_proto->tensor_type().elem_type();
+  return true;
+}
 }  // namespace util
 }  // namespace npu
 }  // namespace vsi

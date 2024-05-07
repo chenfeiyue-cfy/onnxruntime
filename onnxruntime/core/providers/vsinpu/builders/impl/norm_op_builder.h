@@ -27,14 +27,17 @@
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
-enum {
-  input_tensor = 0,
-  scale_tensor = 1,
-  Bias_tensor = 2,
-  mean_tensor = 3,
-  var_tensor = 4
-};
+
 class BatchNormOpBuilder : public BaseOpBuilder {
+  enum NormINPUTS {
+    input_tensor = 0,
+    scale_tensor = 1,
+    Bias_tensor = 2,
+    mean_tensor = 3,
+    var_tensor = 4
+  };
+  int GetMinSupportedOpSet(const NodeUnit& /* node_unit */) const override{ return 9; }
+
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
     auto input_defs = node->InputDefs();
@@ -44,11 +47,11 @@ class BatchNormOpBuilder : public BaseOpBuilder {
       LOGS_DEFAULT(WARNING) << "Training is not supported in batch_norm op.";
       return false;
     }
-    if (helper.HasAttr("spatial") || node->SinceVersion() < 9) {
+    if (helper.HasAttr("spatial")) {
       LOGS_DEFAULT(ERROR) << "VSINPU does not support 'spatial' parameter.";
       return false;
     }
-    if (!graph_viewer.IsConstantInitializer(input_defs[scale_tensor]->Name(), true)) {
+    if (!graph_viewer.IsConstantInitializer(input_defs[NormINPUTS::scale_tensor]->Name(), true)) {
       LOGS_DEFAULT(ERROR) << "Not support mean/var/gamma/beta set as dynamic input yet.";
       return false;
     }
@@ -58,19 +61,18 @@ class BatchNormOpBuilder : public BaseOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
+                     const NodeUnit& node_unit) override {
     LOGS_DEFAULT(INFO) << "Creating BatchNorm Op.";
-    NodeAttrHelper helper(*node);
+    NodeAttrHelper helper(node_unit.GetNode());
     auto epsilon = helper.Get("epsilon", 1e-5f);
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::BatchNorm>(epsilon);
-    std::vector<NodeArg*> input_defs;
-    int indices[] = {input_tensor, mean_tensor, var_tensor, scale_tensor, Bias_tensor};
+    std::vector<std::shared_ptr<tim::vx::Tensor>> reordered_inputs;
+    int indices[] = {NormINPUTS::input_tensor, NormINPUTS::mean_tensor, NormINPUTS::var_tensor, NormINPUTS::scale_tensor, NormINPUTS::Bias_tensor};
     for (int i : indices) {
-      input_defs.push_back(util::RemoveWrapper(node->InputDefs()[i]));
+      reordered_inputs.push_back(inputs[i]);
     }
-
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), input_defs, util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(reordered_inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };

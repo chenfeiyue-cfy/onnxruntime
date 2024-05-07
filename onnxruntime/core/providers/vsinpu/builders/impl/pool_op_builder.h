@@ -53,8 +53,7 @@ class BasePoolOpBuilder : public BaseOpBuilder {
                        const std::array<uint32_t, 2>& strides,
                        const std::array<uint32_t, 4>& pads,
                        bool is_global,
-                       const tim::vx::RoundType ceil_mode,
-                       const Node* node) {
+                       const tim::vx::RoundType ceil_mode) {
     const bool is_1d_pool = inputs[0]->GetShape().size() == 3;
     std::shared_ptr<tim::vx::Operation> op;
 
@@ -75,8 +74,8 @@ class BasePoolOpBuilder : public BaseOpBuilder {
       }
     }
 
-    auto node_info = graph_ep->ConstructNodeIO(std::move(op), util::RemoveWrapper(node->InputDefs()), util::RemoveWrapper(node->OutputDefs()));
-    graph_ep->GetOps().push_back(node_info);
+    (*op).BindInputs(inputs).BindOutputs(outputs);
+    graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
   tim::vx::PoolType pool_type_;
@@ -90,14 +89,14 @@ class TraditionalPoolOpBuilder : public BasePoolOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
-    NodeAttrHelper helper(*node);
+                     const NodeUnit& node_unit) override {
+    NodeAttrHelper helper(node_unit.GetNode());
     auto ksize = helper.Get("kernel_shape", std::vector<uint32_t>{1U, 1U});
     auto strides = helper.Get("strides", std::vector<uint32_t>{1U, 1U});
     auto pads = helper.Get("pads", std::vector<uint32_t>{0U, 0U, 0U, 0U});
     tim::vx::RoundType ceil_mode = helper.Get("ceil_mode", 0U) == 0 ? tim::vx::RoundType::FLOOR : tim::vx::RoundType::CEILING;
     return CreatePoolingOp(graph_ep, inputs, outputs,
-                           {ksize[1], ksize[0]}, {strides[1], strides[0]}, {pads[1], pads[3], pads[0], pads[2]}, false, ceil_mode, node);
+                           {ksize[1], ksize[0]}, {strides[1], strides[0]}, {pads[1], pads[3], pads[0], pads[2]}, false, ceil_mode);
   }
 };
 
@@ -109,10 +108,10 @@ class GlobalPoolOpBuilder : public BasePoolOpBuilder {
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                     const Node* node) override {
-    NodeAttrHelper helper(*node);
+                     const NodeUnit& node_unit) override {
+    NodeAttrHelper helper(node_unit.GetNode());
     tim::vx::RoundType ceil_mode = helper.Get("ceil_mode", 0U) == 0 ? tim::vx::RoundType::FLOOR : tim::vx::RoundType::CEILING;
-    return CreatePoolingOp(graph_ep, inputs, outputs, {}, {}, {}, true, ceil_mode, node);
+    return CreatePoolingOp(graph_ep, inputs, outputs, {}, {}, {}, true, ceil_mode);
   }
 };
 
