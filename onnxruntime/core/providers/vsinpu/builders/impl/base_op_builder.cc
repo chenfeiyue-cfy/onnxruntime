@@ -49,13 +49,13 @@ bool BaseOpBuilder::HasSupportedInputOutputs(const InitializedTensorSet& initial
       return false;
     }
 
-    // We do not support dynamic shape input yet
+    // We do not support dynamic shape input yet, but resize op's second input can be empty cause we not care about this value
     for (const auto& dim : shape_proto->dim()) {
       if (!dim.has_dim_value()) {
         LOGS_DEFAULT(WARNING) << "Dynamic shape is not supported for now, for input:" << node_arg.Name();
         return false;
       }
-      if (dim.dim_value() == 0) {
+      if (dim.dim_value() == 0 && op_type != "Resize") {
         LOGS_DEFAULT(WARNING) << "Zero in shape is not supported for now, for input:" << node_arg.Name();
         return false;
       }
