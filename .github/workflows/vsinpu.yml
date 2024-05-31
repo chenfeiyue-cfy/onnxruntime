@@ -1,0 +1,34 @@
+name: VSINPU_LINUX_CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  Onnxruntime-VSINPU:
+    runs-on: ubuntu-latest
+    steps:
+       - uses: actions/checkout@v4
+       - name: 'Prepare TIM-VX library'
+         run: |
+           git config --global user.email "xiang.zhang@verisilicon.com"
+           git config --global user.name "xiang.zhang"
+           git clone https://github.com/VeriSilicon/TIM-VX.git ${{github.workspace}}/tim-vx
+           cmake -B ${{github.workspace}}/tim-vx/build -S ${{github.workspace}}/tim-vx/ -DCMAKE_BUILD_TYPE=Release
+           cd ${{github.workspace}}/tim-vx/build
+           make install -j4
+       - name: 'Upload timvx binary'
+         uses:  actions/upload-artifact@v4
+         with:
+           name: tim-vx-binary
+           path: |
+             ${{github.workspace}}/tim-vx/build/install
+             ${{github.workspace}}/tim-vx/prebuilt-sdk/
+       - name: 'Build onnxruntime with vsinpu'
+         env:
+          CC_COMPILER: clang
+          CXX_COMPILER: clang++
+          LD_LIBRARY_PATH: ${{github.workspace}}/tim-vx/prebuilt-sdk/x86_64_linux/lib
+          VIVANTE_SDK_DIR: ${{github.workspace}}/tim-vx/prebuilt-sdk/x86_64_linux/
+          TIM_VX_INSTALL: ${{github.workspace}}/tim-vx/build/install
+         run: |
+           ${{github.workspace}}/build.sh --config Release --parallel --build_shared_lib --use_vsinpu --skip_tests
