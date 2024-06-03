@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *    Copyright (c) 2023 Vivante Corporation
+ *    Copyright (c) 2024 Vivante Corporation
  *
  *    Permission is hereby granted, free of charge, to any person obtaining a
  *    copy of this software and associated documentation files (the "Software"),
@@ -21,33 +21,23 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
-#pragma once
-#include <memory>
-#include <vector>
-#include "core/framework/execution_provider.h"
-#include "core/session/abi_session_options_impl.h"
-
+#include "core/providers/shared/utils/utils.h"
+#include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 namespace onnxruntime {
-struct VSINPUExecutionProviderInfo {
-  int device_id{0};
+namespace vsi {
+namespace npu {
+class CastOpBuilder : public BaseOpBuilder {
+ protected:
+  bool HandleBuildOp(vsi::npu::GraphEP* graph_ep, std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                     std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs, const NodeUnit& node_unit) override {
+    LOGS_DEFAULT(VERBOSE) << "Creating Cast Op.";
+    NodeAttrHelper helper(node_unit.GetNode());
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
+    (*op).BindInput(inputs[0]).BindOutputs(outputs);
+    return true;
+  }
 };
 
-class VSINPUExecutionProvider : public IExecutionProvider {
- public:
-  explicit VSINPUExecutionProvider(const VSINPUExecutionProviderInfo& info);
-  virtual ~VSINPUExecutionProvider();
-
-  std::vector<std::unique_ptr<ComputeCapability>> GetCapability(
-      const onnxruntime::GraphViewer& graph_viewer,
-      const IKernelLookup& kernel_lookup) const override;
-  std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
-  Status Compile(const std::vector<FusedNodeAndGraph>& fused_nodes_and_graphs,
-                 std::vector<NodeComputeInfo>& node_compute_funcs) override;
-  OrtMutex& GetMutex() { return mutex_; }
-
- private:
-  int device_id_;
-  OrtMutex mutex_;
-};
-
+}  // namespace npu
+}  // namespace vsi
 }  // namespace onnxruntime

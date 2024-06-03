@@ -42,7 +42,12 @@
 #include "impl/qlinearmatmul_op_builder.h"
 #include "impl/qlinear_binary_op_builder.h"
 #include "impl/qlinearconcat_op_builder.h"
-
+#include "impl/gather_op_builder.h"
+#include "impl/tile_op_builder.h"
+#include "impl/squeeze_op_builder.h"
+#include "impl/unsqueeze_op_builder.h"
+#include "impl/resize_op_builder.h"
+#include "impl/cast_op_builder.h"
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
@@ -94,6 +99,12 @@ static const std::map<std::string, createIOpBuildItemFunc> reg = {
     REGISTER_OP_BUILDER("QLinearAdd", QLinearAddOpBuilder),
     REGISTER_OP_BUILDER("QLinearMul", QLinearMulOpBuilder),
     REGISTER_OP_BUILDER("QLinearConcat", QLinearConcatOpBuilder),
+    REGISTER_OP_BUILDER("Gather", GatherOpBuilder),
+    REGISTER_OP_BUILDER("Tile", TileOpBuilder),
+    REGISTER_OP_BUILDER("Squeeze", SqueezeOpBuilder),
+    REGISTER_OP_BUILDER("Unsqueeze", UnsqueezeOpBuilder),
+    REGISTER_OP_BUILDER("Resize", ResizeOpBuilder),
+    REGISTER_OP_BUILDER("Cast", CastOpBuilder),
 
 #undef REGISTER_OP_BUILDER
 };
