@@ -193,7 +193,6 @@ endif()
 
 if (onnxruntime_USE_VSINPU)
   add_definitions(-DUSE_VSINPU=1)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
   file(GLOB_RECURSE onnxruntime_providers_vsinpu_srcs
     "${ONNXRUNTIME_ROOT}/core/providers/vsinpu/builders/*.h"
     "${ONNXRUNTIME_ROOT}/core/providers/vsinpu/builders/*.cc"
@@ -212,12 +211,24 @@ if (onnxruntime_USE_VSINPU)
   target_include_directories(onnxruntime_providers_vsinpu PRIVATE ${ONNXRUNTIME_ROOT} $ENV{TIM_VX_INSTALL}/include)
 
   find_library(TIMVX_LIBRARY NAMES tim-vx PATHS $ENV{TIM_VX_INSTALL}/lib NO_DEFAULT_PATH)
-  if(TIMVX_LIBRARY)
-    target_link_libraries(onnxruntime_providers_vsinpu PRIVATE ${TIMVX_LIBRARY})
-  else()
-    message(FATAL_ERROR "Cannot find TIM-VX library!")
+  if(NOT TIMVX_LIBRARY)
+    message(FATAL_ERROR "TIM-VX library is not found!")
   endif()
 
+  if(CMAKE_CROSSCOMPILING)
+    message(STATUS "VSINPU ep will be cross compiled.")
+    if(EXISTS "$ENV{VIVANTE_SDK_DIR}/drivers")
+      set(DRIVER_DIR "$ENV{VIVANTE_SDK_DIR}/drivers")
+    elseif(EXISTS "$ENV{VIVANTE_SDK_DIR}/lib")
+      set(DRIVER_DIR "$ENV{VIVANTE_SDK_DIR}/lib")
+    else()
+      message(FATAL_ERROR "Neither drivers nor lib directory exists in this VIVANTE_SDK_DIR.")
+    endif()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wl,-rpath-link ${DRIVER_DIR} ${TIMVX_LIBRARY}")
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+    target_link_libraries(onnxruntime_providers_vsinpu PRIVATE ${TIMVX_LIBRARY})
+  endif()
 endif()
 
 if (onnxruntime_USE_XNNPACK)
