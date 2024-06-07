@@ -21,6 +21,9 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <memory>
+#include <vector>
+#include <utility>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 #include "core/providers/shared/utils/utils.h"
 
@@ -68,7 +71,8 @@ class GatherOpBuilder : public BaseOpBuilder {
       inputs[1]->CopyDataFromTensor(origin_data.data());
       std::vector<int32_t> transformed_data(origin_data.begin(), origin_data.end());
       auto transformed_indices = graph_ep->GetGraph()->CreateTensor(
-          inputs[1]->GetSpec().SetAttribute(tim::vx::TensorAttribute::INPUT).SetDataType(tim::vx::DataType::INT32), transformed_data.data());
+          inputs[1]->GetSpec().SetAttribute(tim::vx::TensorAttribute::INPUT).SetDataType(tim::vx::DataType::INT32),
+          transformed_data.data());
       (*op).BindInput(inputs[0]).BindInput(transformed_indices).BindOutput(outputs[0]);
     }
     graph_ep->GetOps().push_back(std::move(op));

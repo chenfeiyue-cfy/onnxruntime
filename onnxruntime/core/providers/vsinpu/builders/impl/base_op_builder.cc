@@ -21,6 +21,7 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <string>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 
 namespace onnxruntime {
