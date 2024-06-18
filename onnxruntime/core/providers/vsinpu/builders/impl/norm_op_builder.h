@@ -21,6 +21,9 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <memory>
+#include <vector>
+#include <utility>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 #include "core/providers/shared/utils/utils.h"
 
@@ -36,7 +39,7 @@ class BatchNormOpBuilder : public BaseOpBuilder {
     mean_tensor = 3,
     var_tensor = 4
   };
-  int GetMinSupportedOpSet(const NodeUnit& /* node_unit */) const override{ return 9; }
+  int GetMinSupportedOpSet(const NodeUnit& /* node_unit */) const override { return 9; }
 
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {

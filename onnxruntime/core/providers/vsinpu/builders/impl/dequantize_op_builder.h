@@ -21,6 +21,9 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <memory>
+#include <vector>
+#include <utility>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 #include "core/providers/common.h"
 #include "core/providers/shared/utils/utils.h"
@@ -36,7 +39,6 @@ class DequantizeLinearOpBuilder : public BaseOpBuilder {
   };
   bool HasSupportedInputOutputsImpl(const InitializedTensorSet& initializers,
                                     const NodeUnit& node_unit) const override {
-
     auto input_type = node_unit.Inputs()[0].node_arg.Type();
     if (*input_type == "tensor(int64)" || !util::IsTypeSupported(&node_unit.Inputs()[0].node_arg)) {
       LOGS_DEFAULT(WARNING) << node_unit.OpType() << " has unsupported input type : "

@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <limits>
+#include <utility>
 #include "core/providers/vsinpu/builders/impl/clip_op_builder.h"
 
 namespace onnxruntime {

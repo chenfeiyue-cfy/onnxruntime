@@ -21,6 +21,7 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <string>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 
 namespace onnxruntime {
@@ -49,13 +50,13 @@ bool BaseOpBuilder::HasSupportedInputOutputs(const InitializedTensorSet& initial
       return false;
     }
 
-    // We do not support dynamic shape input yet
+    // We do not support dynamic shape input yet, but resize op's second input can be empty cause we not care about this value
     for (const auto& dim : shape_proto->dim()) {
       if (!dim.has_dim_value()) {
         LOGS_DEFAULT(WARNING) << "Dynamic shape is not supported for now, for input:" << node_arg.Name();
         return false;
       }
-      if (dim.dim_value() == 0) {
+      if (dim.dim_value() == 0 && op_type != "Resize") {
         LOGS_DEFAULT(WARNING) << "Zero in shape is not supported for now, for input:" << node_arg.Name();
         return false;
       }
@@ -91,6 +92,10 @@ bool BaseOpBuilder::HasSupportedInputOutputs(const InitializedTensorSet& initial
           return false;
         if (!has_initialized_quant_param(*input.quant_param->zero_point, initializers))
           return false;
+        if (input.quant_param->zero_point->Type() != input.node_arg.Type()) {
+          LOGS_DEFAULT(ERROR) << "Invalid input type because the data type mismatch with its' quant param type.";
+          return false;
+        }
       }
     }
   }
@@ -115,13 +120,21 @@ bool BaseOpBuilder::HasSupportedInputOutputs(const InitializedTensorSet& initial
 
 bool BaseOpBuilder::HasSupportedInputOutputsImpl(
     const InitializedTensorSet& /* initializers */, const NodeUnit& node_unit) const {
-  // Check input data type, int64 is generally unsupported
+  // Check input/output data type, int64 is generally unsupported
   // specific op builder can override this if the int64 input corresponds to VSINPU param
   for (const auto& input : node_unit.Inputs()) {
     auto input_type = input.node_arg.Type();
     if (*input_type == "tensor(int64)" || !util::IsTypeSupported(&input.node_arg)) {
       LOGS_DEFAULT(WARNING) << node_unit.OpType() << " has unsupported input type : "
                             << *input_type;
+      return false;
+    }
+  }
+  for (const auto& output : node_unit.Outputs()) {
+    auto output_type = output.node_arg.Type();
+    if (*output_type == "tensor(int64)" || !util::IsTypeSupported(&output.node_arg)) {
+      LOGS_DEFAULT(WARNING) << node_unit.OpType() << " has unsupported output type : "
+                            << *output_type;
       return false;
     }
   }

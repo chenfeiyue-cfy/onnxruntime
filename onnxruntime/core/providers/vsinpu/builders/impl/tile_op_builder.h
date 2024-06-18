@@ -25,53 +25,46 @@
 #include <vector>
 #include <utility>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
-#include "core/providers/common.h"
-#include "core/providers/shared/utils/utils.h"
 
 namespace onnxruntime {
 namespace vsi {
 namespace npu {
+class TileOpBuilder : public BaseOpBuilder {
+  int GetMinSupportedOpSet(const NodeUnit& /* node_unit */) const override { return 6; }
 
-class QuantizeLinearOpBuilder : public BaseOpBuilder {
-  enum QuantizeINPUTS {
-    input_tensor = 0,
-    scale_tensor = 1,
-    zero_point_tensor = 2
-  };
-
-  bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
-                     const Node* node) const override {
-    auto input_defs = node->InputDefs();
-    auto scale_shape = npu::util::GetTensorShape(*input_defs[QuantizeINPUTS::scale_tensor]);
-    NodeAttrHelper helper(*node);
-    if (helper.HasAttr("block_size") && helper.Get("block_size", 0) != 0) {
-      LOGS_DEFAULT(WARNING) << "Not support block quantization.";
+  bool HasSupportedInputOutputsImpl(const InitializedTensorSet& initializers,
+                                    const NodeUnit& node_unit) const override {
+    auto input = node_unit.Inputs()[0];
+    auto multipliers = node_unit.Inputs()[1];
+    if (initializers.end() == initializers.find(multipliers.node_arg.Name())) {
+      LOGS_DEFAULT(WARNING) << "Multipliers of tile op must be known.";
       return false;
     }
-    if (!graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::scale_tensor]->Name(), true) ||
-        (input_defs.size() == 3 && !graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::zero_point_tensor]->Name(), true))) {
-      LOGS_DEFAULT(WARNING) << "Only support const scale / zero point.";
-      return false;
+    if (util::IsTypeSupported(&input.node_arg) && util::IsTypeSupported(&multipliers.node_arg)) {
+      if (*input.node_arg.Type() != "tensor(int64)") {
+        return true;
+      }
     }
-
-    if (scale_shape.Size() != 1) {
-      LOGS_DEFAULT(WARNING) << "Per channel quantized output is not supported in QuantizeLinearOp.";
-      return false;
-    }
-    return true;
+    LOGS_DEFAULT(WARNING) << "Input type not supported.";
+    return false;
   }
 
   bool HandleBuildOp(vsi::npu::GraphEP* graph_ep,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                      std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                      const NodeUnit& node_unit) override {
-    LOGS_DEFAULT(INFO) << "Creating Quantize Op.";
-    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
-    (*op).BindInputs(inputs).BindOutputs(outputs);
+    LOGS_DEFAULT(VERBOSE) << "Creating Tile Op.";
+    std::vector<int64_t> multipliers(inputs[1]->GetShape()[0]);
+    inputs[1]->CopyDataFromTensor(multipliers.data());
+    std::reverse(multipliers.begin(), multipliers.end());
+    std::vector<int32_t> timvx_multipliers(multipliers.begin(), multipliers.end());
+    auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Tile>(timvx_multipliers);
+    (*op).BindInput(inputs[0]).BindOutputs(outputs);
     graph_ep->GetOps().push_back(std::move(op));
     return true;
   }
 };
+
 }  // namespace npu
 
 }  // namespace vsi

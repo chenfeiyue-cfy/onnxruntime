@@ -21,10 +21,13 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <string>
+#include <memory>
+#include <vector>
+#include <utility>
 #include "core/providers/shared/utils/utils.h"
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 #include "core/framework/tensorprotoutils.h"
-#include <variant>
 namespace onnxruntime {
 namespace vsi {
 namespace npu {

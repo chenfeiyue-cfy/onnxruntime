@@ -21,6 +21,9 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#include <memory>
+#include <vector>
+#include <utility>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
 #include "core/providers/shared/utils/utils.h"
 
@@ -29,7 +32,7 @@ namespace vsi {
 namespace npu {
 class BasePoolOpBuilder : public BaseOpBuilder {
  public:
-  BasePoolOpBuilder(tim::vx::PoolType pool_type) : pool_type_(pool_type) {}
+  explicit BasePoolOpBuilder(tim::vx::PoolType pool_type) : pool_type_(pool_type) {}
 
  protected:
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer, const Node* node) const override {
