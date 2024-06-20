@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_QLINEARCONV_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_QLINEARCONV_OP_BUILDER_H_
 #include <string>
 #include <memory>
 #include <vector>
@@ -55,7 +57,8 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
       return false;
     }
 
-    if (!graph_viewer.IsConstantInitializer(input_defs[QLinearConvINPUTS::INPUT_TENSOR_SCALE]->Name(), true) || !graph_viewer.IsConstantInitializer(input_defs[WEIGHT_TENSOR]->Name(), true)) {
+    if (!graph_viewer.IsConstantInitializer(input_defs[QLinearConvINPUTS::INPUT_TENSOR_SCALE]->Name(), true) ||
+        !graph_viewer.IsConstantInitializer(input_defs[WEIGHT_TENSOR]->Name(), true)) {
       LOGS_DEFAULT(WARNING) << "Not support quantization definitions or weights that are not constant yet.";
       return false;
     }
@@ -148,3 +151,4 @@ class QLinearConvOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_QLINEARCONV_OP_BUILDER_H_

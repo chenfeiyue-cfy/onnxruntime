@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_QUANTIZE_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_QUANTIZE_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -49,7 +51,8 @@ class QuantizeLinearOpBuilder : public BaseOpBuilder {
       return false;
     }
     if (!graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::scale_tensor]->Name(), true) ||
-        (input_defs.size() == 3 && !graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::zero_point_tensor]->Name(), true))) {
+        (input_defs.size() == 3 &&
+         !graph_viewer.IsConstantInitializer(input_defs[QuantizeINPUTS::zero_point_tensor]->Name(), true))) {
       LOGS_DEFAULT(WARNING) << "Only support const scale / zero point.";
       return false;
     }
@@ -76,3 +79,4 @@ class QuantizeLinearOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_QUANTIZE_OP_BUILDER_H_

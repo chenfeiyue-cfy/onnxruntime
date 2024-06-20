@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_CLIP_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_CLIP_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include "core/providers/vsinpu/builders/impl/base_op_builder.h"
@@ -33,7 +35,8 @@ class ClipOpBuilder final : public BaseOpBuilder {
   bool IsOpSupported(const onnxruntime::GraphViewer& graph_viewer,
                      const Node* node) const override {
     if (node->SinceVersion() > 6) {
-      if (node->InputDefs().size() > 1 && !Contains(graph_viewer.GetAllInitializedTensors(), node->InputDefs()[1]->Name())) {
+      if (node->InputDefs().size() > 1 &&
+          !Contains(graph_viewer.GetAllInitializedTensors(), node->InputDefs()[1]->Name())) {
         LOGS_DEFAULT(WARNING) << "Min/Max value must be const input or attribute.";
         return false;
       }
@@ -54,3 +57,4 @@ class ClipOpBuilder final : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_CLIP_OP_BUILDER_H_

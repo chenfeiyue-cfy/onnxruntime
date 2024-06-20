@@ -22,6 +22,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_ELEMENTWISE_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_ELEMENTWISE_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -71,7 +73,8 @@ class PowOpBuilder : public BaseOpBuilder {
     auto input0_type = *node->InputDefs()[0]->Type();
     auto input1_type = *node->InputDefs()[1]->Type();
     if (input0_type != input1_type) {
-      if ((input0_type == "tensor(float)" && input1_type == "tensor(int32)") || (input0_type == "tensor(int32)" && input1_type == "tensor(float)")) {
+      if ((input0_type == "tensor(float)" && input1_type == "tensor(int32)") ||
+          (input0_type == "tensor(int32)" && input1_type == "tensor(float)")) {
         LOGS_DEFAULT(WARNING) << "Pow op does not support one of input is float32 while the other one is int32 type.";
         return false;
       }
@@ -95,3 +98,4 @@ class PowOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_ELEMENTWISE_OP_BUILDER_H_
