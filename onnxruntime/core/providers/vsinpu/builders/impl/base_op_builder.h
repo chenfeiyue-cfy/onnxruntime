@@ -54,7 +54,7 @@ class BaseOpBuilder : public IOpBuilder {
   virtual bool HasSupportedInputOutputsImpl(
       const InitializedTensorSet& initializers, const NodeUnit& node_unit) const;
 
-  // TODO:Check if this node_unit's type is supported
+  // TODO(cfy) :Check if this node_unit's type is supported
   virtual bool IsNodeUnitTypeSupported(const NodeUnit& node_unit) const { return true; }
 
   virtual bool HandleBuildOp(

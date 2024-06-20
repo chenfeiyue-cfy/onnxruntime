@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_DEQUANTIZE_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_DEQUANTIZE_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -49,7 +51,8 @@ class DequantizeLinearOpBuilder : public BaseOpBuilder {
       LOGS_DEFAULT(WARNING) << "The quantization params must be known.";
       return false;
     }
-    if (node_unit.Inputs()[0].quant_param->scale.Shape()->dim_size() != 0 && node_unit.Inputs()[0].quant_param->scale.Shape()->dim(0).dim_value() != 1) {
+    if (node_unit.Inputs()[0].quant_param->scale.Shape()->dim_size() != 0 &&
+        node_unit.Inputs()[0].quant_param->scale.Shape()->dim(0).dim_value() != 1) {
       LOGS_DEFAULT(WARNING) << "Per channel quantized input is not support in DequantizeLinear op.";
       return false;
     }
@@ -80,3 +83,4 @@ class DequantizeLinearOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_DEQUANTIZE_OP_BUILDER_H_

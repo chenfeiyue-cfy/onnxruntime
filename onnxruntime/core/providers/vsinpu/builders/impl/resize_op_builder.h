@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_RESIZE_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_RESIZE_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -120,14 +122,14 @@ class ResizeOpBuilder : public BaseOpBuilder {
                                                                            half_pixel_center, 0);
       }
     } else {
-      int target_height, target_width;
+      int target_h, target_w;
       if (is_size_set) {
         std::vector<int64_t> onnx_sizes(inputs[3]->GetShape().size());
         inputs[3]->CopyDataFromTensor(onnx_sizes.data());
-        target_height = static_cast<int>(onnx_sizes[1]);
-        target_width = static_cast<int>(onnx_sizes[0]);
+        target_h = static_cast<int>(onnx_sizes[1]);
+        target_w = static_cast<int>(onnx_sizes[0]);
         op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Resize>(resize_type, 0.0f, align_corners,
-                                                                         half_pixel_center, target_height, target_width);
+                                                                         half_pixel_center, target_h, target_w);
       } else {
         auto input_shape = inputs[0]->GetShape();
         std::vector<float> scales(input_shape.size());
@@ -136,8 +138,10 @@ class ResizeOpBuilder : public BaseOpBuilder {
         for (int i = 0; i < input_shape.size(); i++) {
           out_shape[i] = input_shape[i] * scales[input_shape.size() - 1 - i];
         }
+        target_h = static_cast<int>(out_shape[1]);
+        target_w = static_cast<int>(out_shape[0]);
         op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Resize>(resize_type, 0, align_corners,
-                                                                         half_pixel_center, out_shape[1], out_shape[0]);
+                                                                         half_pixel_center, target_h, target_w);
       }
     }
 
@@ -151,3 +155,4 @@ class ResizeOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_RESIZE_OP_BUILDER_H_
