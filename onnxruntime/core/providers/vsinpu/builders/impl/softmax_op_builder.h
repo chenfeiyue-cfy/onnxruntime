@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_SOFTMAX_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_SOFTMAX_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -67,7 +69,8 @@ class SoftmaxOpBuilder : public BaseOpBuilder {
         auto reshaped_spec = inputs[0]->GetSpec().AsTransientSpec().SetShape(
             std::vector<uint32_t>{first_dim, last_dim});
         auto reshaped_input = graph_ep->GetGraph()->CreateTensor(reshaped_spec);
-        auto reshaped_output = graph_ep->GetGraph()->CreateTensor(inputs[0]->GetSpec().AsTransientSpec());
+        auto reshaped_output = graph_ep->GetGraph()->CreateTensor(
+            inputs[0]->GetSpec().AsTransientSpec());
 
         auto reshape_input_op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
             std::vector<uint32_t>{first_dim, last_dim});
@@ -99,3 +102,4 @@ class SoftmaxOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_SOFTMAX_OP_BUILDER_H_

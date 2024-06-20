@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_GATHER_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_GATHER_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -84,3 +86,4 @@ class GatherOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_GATHER_OP_BUILDER_H_
