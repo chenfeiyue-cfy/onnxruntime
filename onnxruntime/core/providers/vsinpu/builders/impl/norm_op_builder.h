@@ -21,6 +21,8 @@
  *    DEALINGS IN THE SOFTWARE.
  *
  *****************************************************************************/
+#ifndef ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_NORM_OP_BUILDER_H_
+#define ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_NORM_OP_BUILDER_H_
 #include <memory>
 #include <vector>
 #include <utility>
@@ -70,7 +72,8 @@ class BatchNormOpBuilder : public BaseOpBuilder {
     auto epsilon = helper.Get("epsilon", 1e-5f);
     auto op = graph_ep->GetGraph()->CreateOperation<tim::vx::ops::BatchNorm>(epsilon);
     std::vector<std::shared_ptr<tim::vx::Tensor>> reordered_inputs;
-    int indices[] = {NormINPUTS::input_tensor, NormINPUTS::mean_tensor, NormINPUTS::var_tensor, NormINPUTS::scale_tensor, NormINPUTS::Bias_tensor};
+    int indices[] = {NormINPUTS::input_tensor, NormINPUTS::mean_tensor, NormINPUTS::var_tensor,
+                     NormINPUTS::scale_tensor, NormINPUTS::Bias_tensor};
     for (int i : indices) {
       reordered_inputs.push_back(inputs[i]);
     }
@@ -83,3 +86,4 @@ class BatchNormOpBuilder : public BaseOpBuilder {
 
 }  // namespace vsi
 }  // namespace onnxruntime
+#endif  // ONNXRUNTIME_CORE_PROVIDERS_VSINPU_BUILDERS_IMPL_NORM_OP_BUILDER_H_
